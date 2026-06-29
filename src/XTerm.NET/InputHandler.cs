@@ -877,11 +877,13 @@ public class InputHandler
                 EraseInLine(parameters); // Current line to cursor
                 break;
             case 2: // Erase all
-            case 3: // Erase scrollback (extension)
                 for (int i = 0; i < _terminal.Rows; i++)
                 {
                     _buffer.Lines[_buffer.YBase + i]?.Fill(emptyCell);
                 }
+                break;
+            case 3: // Erase scrollback
+                _buffer.EraseScrollback();
                 break;
         }
     }

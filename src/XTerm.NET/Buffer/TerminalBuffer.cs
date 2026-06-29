@@ -390,4 +390,20 @@ public class TerminalBuffer
         ResetScrollRegion();
         SavedCursorState = new SavedCursor();
     }
+    
+    /// <summary>
+    /// Erases the scrollback portion of the buffer, keeping only the active screen lines.
+    /// </summary>
+    public void EraseScrollback()
+    {
+        int scrollbackLines = _lines.Length - _rows;
+    
+        if (scrollbackLines > 0)
+        {
+            _lines.TrimStart(scrollbackLines);
+        
+            _yBase = 0;
+            _yDisp = 0;
+        }
+    }
 }
