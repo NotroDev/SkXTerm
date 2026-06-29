@@ -1,40 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <RootNamespace>XTerm</RootNamespace>
-  </PropertyGroup>
-<PropertyGroup>
-    <Version>1.0.15</Version>
-    <AssemblyVersion>1.0.15.0</AssemblyVersion>
-    <Description>Dotnet port of xterm.js, giving you ability to host console application.</Description>
-    <Company>Iciclecreek</Company>
-    <Authors>Tom Laird-McConnell</Authors>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/tomlm/XTerm.NET</PackageProjectUrl>
-    <PackageIconUrl>https://raw.githubusercontent.com/tomlm/XTerm.NET/master/icon.png</PackageIconUrl>
-    <PackageIcon>icon.png</PackageIcon>
-    <Keyword>xterm;terminal;</Keyword>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <RepositoryUrl>https://github.com/tomlm/XTerm.NET</RepositoryUrl>
-    <Copyright>Tom Laird-McConnell All Rights Reserved</Copyright>
-    <RootNamespace>XTerm.NET</RootNamespace>
-    <ContentTargetFolders>content</ContentTargetFolders>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>  
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <None Include="../../README.md" Pack="true" PackagePath="" />
-    <None Include="../../icon.png" Pack="true" PackagePath="" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Unicode.net" Version="2.0.0" />
-    <PackageReference Include="Wcwidth" Version="3.0.0" />
-  </ItemGroup>
-
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>XTerm.NET</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Unicode.net" Version="2.0.0" />
+        <PackageReference Include="Wcwidth" Version="3.0.0" />
+    </ItemGroup>
 </Project>
