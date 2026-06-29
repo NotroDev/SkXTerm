@@ -663,4 +663,15 @@ public class Terminal
         WindowFullscreened = null;
         WindowInfoRequested = null;
     }
+    
+    /// <summary>
+    /// Clears the scrollback buffer for both normal and alternate buffers.
+    /// </summary>
+    public void ClearScrollback()
+    {
+        _normalBuffer?.ClearScrollback();
+        _altBuffer?.ClearScrollback();
+    
+        _inputHandler.SetBuffer(_buffer);
+    }
 }

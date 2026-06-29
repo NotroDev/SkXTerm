@@ -368,4 +368,26 @@ public class TerminalBuffer
         }
         return sb.ToString();
     }
+    
+    /// <summary>
+    /// Clears the entire buffer, including scrollback and resets the cursor and scroll region.
+    /// </summary>
+    public void ClearScrollback()
+    {
+        _lines.Clear();
+
+        var fillCell = BufferCell.Space;
+        for (int i = 0; i < _rows; i++)
+        {
+            _lines.Push(new BufferLine(_cols, fillCell));
+        }
+
+        _yBase = 0;
+        _yDisp = 0;
+        _y = 0;
+        _x = 0;
+    
+        ResetScrollRegion();
+        SavedCursorState = new SavedCursor();
+    }
 }
