@@ -1,7 +1,7 @@
 namespace XTerm.Input;
 
 /// <summary>
-/// Mouse buttons.
+///     Mouse buttons.
 /// </summary>
 public enum MouseButton
 {
@@ -10,11 +10,11 @@ public enum MouseButton
     Middle = 1,
     Right = 2,
     WheelUp = 64,
-    WheelDown = 65,
+    WheelDown = 65
 }
 
 /// <summary>
-/// Mouse event types.
+///     Mouse event types.
 /// </summary>
 public enum MouseEventType
 {
@@ -23,28 +23,28 @@ public enum MouseEventType
     Move,
     Drag,
     WheelUp,
-    WheelDown,
+    WheelDown
 }
 
 /// <summary>
-/// Mouse tracking mode.
+///     Mouse tracking mode.
 /// </summary>
 public enum MouseTrackingMode
 {
     None = 0,
-    X10 = 9,              // Click only (CSI ? 9 h)
-    VT200 = 1000,         // Normal tracking (CSI ? 1000 h)
-    ButtonEvent = 1002,   // Button events + drag (CSI ? 1002 h)
-    AnyEvent = 1003,      // All events including motion (CSI ? 1003 h)
+    X10 = 9, // Click only (CSI ? 9 h)
+    Vt200 = 1000, // Normal tracking (CSI ? 1000 h)
+    ButtonEvent = 1002, // Button events + drag (CSI ? 1002 h)
+    AnyEvent = 1003 // All events including motion (CSI ? 1003 h)
 }
 
 /// <summary>
-/// Mouse encoding format.
+///     Mouse encoding format.
 /// </summary>
 public enum MouseEncoding
 {
-    Default,    // X10/VT200 format (limited to 223 columns)
-    Utf8,       // UTF-8 encoding (CSI ? 1005 h)
-    SGR,        // SGR format (CSI ? 1006 h) - recommended
-    URXVT,      // URXVT format (CSI ? 1015 h)
+    Default, // X10/VT200 format (limited to 223 columns)
+    Utf8, // UTF-8 encoding (CSI ? 1005 h)
+    Sgr, // SGR format (CSI ? 1006 h) - recommended
+    Urxvt // URXVT format (CSI ? 1015 h)
 }

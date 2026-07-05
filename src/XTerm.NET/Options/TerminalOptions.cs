@@ -3,169 +3,19 @@ using XTerm.Common;
 namespace XTerm.Options;
 
 /// <summary>
-/// Terminal configuration options.
+///     Terminal configuration options.
 /// </summary>
 public class TerminalOptions : ICloneable
 {
     /// <summary>
-    /// Number of columns in the terminal.
-    /// </summary>
-    public int Cols { get; set; } = 80;
-
-    /// <summary>
-    /// Number of rows in the terminal.
-    /// </summary>
-    public int Rows { get; set; } = 24;
-
-    /// <summary>
-    /// Amount of scrollback in the terminal. 0 disables scrollback.
-    /// </summary>
-    public int Scrollback { get; set; } = 1000;
-
-    /// <summary>
-    /// Tab stop width.
-    /// </summary>
-    public int TabStopWidth { get; set; } = 8;
-
-    /// <summary>
-    /// Whether to enable bell sound/notification.
-    /// </summary>
-    public bool BellSound { get; set; } = false;
-
-    /// <summary>
-    /// Bell sound volume (0-1).
-    /// </summary>
-    public double BellVolume { get; set; } = 0.5;
-
-    /// <summary>
-    /// Enable bell style (sound, visual, both, none).
-    /// </summary>
-    public BellStyle BellStyle { get; set; } = BellStyle.None;
-
-    /// <summary>
-    /// Cursor blink rate in milliseconds.
-    /// </summary>
-    public int CursorBlinkRate { get; set; } = 530;
-
-    /// <summary>
-    /// Cursor style.
-    /// </summary>
-    public CursorStyle CursorStyle { get; set; } = CursorStyle.Block;
-
-    /// <summary>
-    /// Whether the cursor should blink.
-    /// </summary>
-    public bool CursorBlink { get; set; } = false;
-
-    /// <summary>
-    /// Font family.
-    /// </summary>
-    public string FontFamily { get; set; } = "monospace";
-
-    /// <summary>
-    /// Font size in pixels.
-    /// </summary>
-    public int FontSize { get; set; } = 15;
-
-    /// <summary>
-    /// Font weight.
-    /// </summary>
-    public string FontWeight { get; set; } = "normal";
-
-    /// <summary>
-    /// Font weight for bold text.
-    /// </summary>
-    public string FontWeightBold { get; set; } = "bold";
-
-    /// <summary>
-    /// Letter spacing.
-    /// </summary>
-    public double LetterSpacing { get; set; } = 0;
-
-    /// <summary>
-    /// Line height multiplier.
-    /// </summary>
-    public double LineHeight { get; set; } = 1.0;
-
-    /// <summary>
-    /// Whether to enable line wrapping.
-    /// </summary>
-    public bool Wraparound { get; set; } = true;
-
-    /// <summary>
-    /// Whether to convert EOL characters.
-    /// </summary>
-    public bool ConvertEol { get; set; } = false;
-
-    /// <summary>
-    /// Terminal type reported.
-    /// </summary>
-    public string TermName { get; set; } = "xterm";
-
-    /// <summary>
-    /// Whether to enable fast scrolling.
-    /// </summary>
-    public bool FastScrollModifier { get; set; } = false;
-
-    /// <summary>
-    /// Scroll sensitivity.
-    /// </summary>
-    public int ScrollSensitivity { get; set; } = 1;
-
-    /// <summary>
-    /// Whether to allow transparency.
-    /// </summary>
-    public bool AllowTransparency { get; set; } = false;
-
-    /// <summary>
-    /// Mac option is meta key.
-    /// </summary>
-    public bool MacOptionIsMeta { get; set; } = false;
-
-    /// <summary>
-    /// Right click selects word.
-    /// </summary>
-    public bool RightClickSelectsWord { get; set; } = true;
-
-    /// <summary>
-    /// Renderer type.
-    /// </summary>
-    public RendererType RendererType { get; set; } = RendererType.Canvas;
-
-    /// <summary>
-    /// Window options handling.
-    /// </summary>
-    public WindowOptions WindowOptions { get; set; } = new WindowOptions();
-
-    /// <summary>
-    /// Theme colors.
-    /// </summary>
-    public ThemeOptions Theme { get; set; } = new ThemeOptions();
-
-    /// <summary>
-    /// Minimum contrast ratio.
-    /// </summary>
-    public double MinimumContrastRatio { get; set; } = 1;
-
-    /// <summary>
-    /// Whether to draw bold text in bright colors.
-    /// </summary>
-    public bool DrawBoldTextInBrightColors { get; set; } = true;
-
-    /// <summary>
-    /// Custom key event handler.
-    /// </summary>
-    public Func<KeyEvent, bool>? CustomKeyEventHandler { get; set; }
-
-    /// <summary>
-    /// Default constructor.
+    ///     Default constructor.
     /// </summary>
     public TerminalOptions()
     {
     }
 
     /// <summary>
-    /// Copy constructor for cloning.
+    ///     Copy constructor for cloning.
     /// </summary>
     public TerminalOptions(TerminalOptions other)
     {
@@ -202,24 +52,174 @@ public class TerminalOptions : ICloneable
     }
 
     /// <summary>
-    /// Creates a copy of this TerminalOptions.
+    ///     Number of columns in the terminal.
     /// </summary>
-    public TerminalOptions Clone()
-    {
-        return new TerminalOptions(this);
-    }
+    public int Cols { get; set; } = 80;
 
     /// <summary>
-    /// Explicit interface implementation for ICloneable.
+    ///     Number of rows in the terminal.
+    /// </summary>
+    public int Rows { get; set; } = 24;
+
+    /// <summary>
+    ///     Amount of scrollback in the terminal. 0 disables scrollback.
+    /// </summary>
+    public int Scrollback { get; set; } = 1000;
+
+    /// <summary>
+    ///     Tab stop width.
+    /// </summary>
+    public int TabStopWidth { get; set; } = 8;
+
+    /// <summary>
+    ///     Whether to enable bell sound/notification.
+    /// </summary>
+    public bool BellSound { get; set; }
+
+    /// <summary>
+    ///     Bell sound volume (0-1).
+    /// </summary>
+    public double BellVolume { get; set; } = 0.5;
+
+    /// <summary>
+    ///     Enable bell style (sound, visual, both, none).
+    /// </summary>
+    public BellStyle BellStyle { get; set; } = BellStyle.None;
+
+    /// <summary>
+    ///     Cursor blink rate in milliseconds.
+    /// </summary>
+    public int CursorBlinkRate { get; set; } = 530;
+
+    /// <summary>
+    ///     Cursor style.
+    /// </summary>
+    public CursorStyle CursorStyle { get; set; } = CursorStyle.Block;
+
+    /// <summary>
+    ///     Whether the cursor should blink.
+    /// </summary>
+    public bool CursorBlink { get; set; }
+
+    /// <summary>
+    ///     Font family.
+    /// </summary>
+    public string FontFamily { get; set; } = "monospace";
+
+    /// <summary>
+    ///     Font size in pixels.
+    /// </summary>
+    public int FontSize { get; set; } = 15;
+
+    /// <summary>
+    ///     Font weight.
+    /// </summary>
+    public string FontWeight { get; set; } = "normal";
+
+    /// <summary>
+    ///     Font weight for bold text.
+    /// </summary>
+    public string FontWeightBold { get; set; } = "bold";
+
+    /// <summary>
+    ///     Letter spacing.
+    /// </summary>
+    public double LetterSpacing { get; set; }
+
+    /// <summary>
+    ///     Line height multiplier.
+    /// </summary>
+    public double LineHeight { get; set; } = 1.0;
+
+    /// <summary>
+    ///     Whether to enable line wrapping.
+    /// </summary>
+    public bool Wraparound { get; set; } = true;
+
+    /// <summary>
+    ///     Whether to convert EOL characters.
+    /// </summary>
+    public bool ConvertEol { get; set; }
+
+    /// <summary>
+    ///     Terminal type reported.
+    /// </summary>
+    public string TermName { get; set; } = "xterm";
+
+    /// <summary>
+    ///     Whether to enable fast scrolling.
+    /// </summary>
+    public bool FastScrollModifier { get; set; }
+
+    /// <summary>
+    ///     Scroll sensitivity.
+    /// </summary>
+    public int ScrollSensitivity { get; set; } = 1;
+
+    /// <summary>
+    ///     Whether to allow transparency.
+    /// </summary>
+    public bool AllowTransparency { get; set; }
+
+    /// <summary>
+    ///     Mac option is meta key.
+    /// </summary>
+    public bool MacOptionIsMeta { get; set; }
+
+    /// <summary>
+    ///     Right click selects word.
+    /// </summary>
+    public bool RightClickSelectsWord { get; set; } = true;
+
+    /// <summary>
+    ///     Renderer type.
+    /// </summary>
+    public RendererType RendererType { get; set; } = RendererType.Canvas;
+
+    /// <summary>
+    ///     Window options handling.
+    /// </summary>
+    public WindowOptions WindowOptions { get; set; } = new();
+
+    /// <summary>
+    ///     Theme colors.
+    /// </summary>
+    public ThemeOptions Theme { get; set; } = new();
+
+    /// <summary>
+    ///     Minimum contrast ratio.
+    /// </summary>
+    public double MinimumContrastRatio { get; set; } = 1;
+
+    /// <summary>
+    ///     Whether to draw bold text in bright colors.
+    /// </summary>
+    public bool DrawBoldTextInBrightColors { get; set; } = true;
+
+    /// <summary>
+    ///     Custom key event handler.
+    /// </summary>
+    public Func<KeyEvent, bool>? CustomKeyEventHandler { get; set; }
+
+    /// <summary>
+    ///     Explicit interface implementation for ICloneable.
     /// </summary>
     object ICloneable.Clone()
     {
         return Clone();
     }
+
+    /// <summary>
+    ///     Creates a copy of this TerminalOptions.
+    /// </summary>
+    public TerminalOptions Clone()
+    {
+        return new TerminalOptions(this);
+    }
 }
 
 /// <summary>
-/// Bell style options.
+///     Bell style options.
 /// </summary>
 public enum BellStyle
 {
@@ -230,48 +230,29 @@ public enum BellStyle
 }
 
 /// <summary>
-/// Renderer type options.
+///     Renderer type options.
 /// </summary>
 public enum RendererType
 {
     Canvas,
     Dom,
-    WebGL
+    WebGl
 }
 
 /// <summary>
-/// Window options for OSC commands.
+///     Window options for OSC commands.
 /// </summary>
 public class WindowOptions : ICloneable
 {
-    public bool GetWinPosition { get; set; } = false;
-    public bool GetWinSizePixels { get; set; } = false;
-    public bool GetWinSizeChars { get; set; } = false;
-    public bool GetScreenSizePixels { get; set; } = false;
-    public bool GetCellSizePixels { get; set; } = false;
-    public bool GetIconTitle { get; set; } = false;
-    public bool GetWinTitle { get; set; } = false;
-    public bool GetWinState { get; set; } = false;
-    public bool SetWinPosition { get; set; } = false;
-    public bool SetWinSizePixels { get; set; } = false;
-    public bool SetWinSizeChars { get; set; } = false;
-    public bool RaiseWin { get; set; } = false;
-    public bool LowerWin { get; set; } = false;
-    public bool RefreshWin { get; set; } = false;
-    public bool RestoreWin { get; set; } = false;
-    public bool MaximizeWin { get; set; } = false;
-    public bool MinimizeWin { get; set; } = false;
-    public bool FullscreenWin { get; set; } = false;
-
     /// <summary>
-    /// Default constructor.
+    ///     Default constructor.
     /// </summary>
     public WindowOptions()
     {
     }
 
     /// <summary>
-    /// Copy constructor for cloning.
+    ///     Copy constructor for cloning.
     /// </summary>
     public WindowOptions(WindowOptions other)
     {
@@ -295,28 +276,83 @@ public class WindowOptions : ICloneable
         FullscreenWin = other.FullscreenWin;
     }
 
-    /// <summary>
-    /// Creates a copy of this WindowOptions.
-    /// </summary>
-    public WindowOptions Clone()
-    {
-        return new WindowOptions(this);
-    }
+    public bool GetWinPosition { get; set; }
+    public bool GetWinSizePixels { get; set; }
+    public bool GetWinSizeChars { get; set; }
+    public bool GetScreenSizePixels { get; set; }
+    public bool GetCellSizePixels { get; set; }
+    public bool GetIconTitle { get; set; }
+    public bool GetWinTitle { get; set; }
+    public bool GetWinState { get; set; }
+    public bool SetWinPosition { get; set; }
+    public bool SetWinSizePixels { get; set; }
+    public bool SetWinSizeChars { get; set; }
+    public bool RaiseWin { get; set; }
+    public bool LowerWin { get; set; }
+    public bool RefreshWin { get; set; }
+    public bool RestoreWin { get; set; }
+    public bool MaximizeWin { get; set; }
+    public bool MinimizeWin { get; set; }
+    public bool FullscreenWin { get; set; }
 
     /// <summary>
-    /// Explicit interface implementation for ICloneable.
+    ///     Explicit interface implementation for ICloneable.
     /// </summary>
     object ICloneable.Clone()
     {
         return Clone();
     }
+
+    /// <summary>
+    ///     Creates a copy of this WindowOptions.
+    /// </summary>
+    public WindowOptions Clone()
+    {
+        return new WindowOptions(this);
+    }
 }
 
 /// <summary>
-/// Theme color options.
+///     Theme color options.
 /// </summary>
 public class ThemeOptions : ICloneable
 {
+    /// <summary>
+    ///     Default constructor.
+    /// </summary>
+    public ThemeOptions()
+    {
+    }
+
+    /// <summary>
+    ///     Copy constructor for cloning.
+    /// </summary>
+    public ThemeOptions(ThemeOptions other)
+    {
+        Foreground = other.Foreground;
+        Background = other.Background;
+        Cursor = other.Cursor;
+        CursorAccent = other.CursorAccent;
+        Selection = other.Selection;
+        SelectionInactive = other.SelectionInactive;
+        Black = other.Black;
+        Red = other.Red;
+        Green = other.Green;
+        Yellow = other.Yellow;
+        Blue = other.Blue;
+        Magenta = other.Magenta;
+        Cyan = other.Cyan;
+        White = other.White;
+        BrightBlack = other.BrightBlack;
+        BrightRed = other.BrightRed;
+        BrightGreen = other.BrightGreen;
+        BrightYellow = other.BrightYellow;
+        BrightBlue = other.BrightBlue;
+        BrightMagenta = other.BrightMagenta;
+        BrightCyan = other.BrightCyan;
+        BrightWhite = other.BrightWhite;
+    }
+
     public string? Foreground { get; set; }
     public string? Background { get; set; }
     public string? Cursor { get; set; }
@@ -345,60 +381,24 @@ public class ThemeOptions : ICloneable
     public string? BrightWhite { get; set; }
 
     /// <summary>
-    /// Default constructor.
-    /// </summary>
-    public ThemeOptions()
-    {
-    }
-
-    /// <summary>
-    /// Copy constructor for cloning.
-    /// </summary>
-    public ThemeOptions(ThemeOptions other)
-    {
-        Foreground = other.Foreground;
-        Background = other.Background;
-        Cursor = other.Cursor;
-        CursorAccent = other.CursorAccent;
-        Selection = other.Selection;
-        SelectionInactive = other.SelectionInactive;
-        Black = other.Black;
-        Red = other.Red;
-        Green = other.Green;
-        Yellow = other.Yellow;
-        Blue = other.Blue;
-        Magenta = other.Magenta;
-        Cyan = other.Cyan;
-        White = other.White;
-        BrightBlack = other.BrightBlack;
-        BrightRed = other.BrightRed;
-        BrightGreen = other.BrightGreen;
-        BrightYellow = other.BrightYellow;
-        BrightBlue = other.BrightBlue;
-        BrightMagenta = other.BrightMagenta;
-        BrightCyan = other.BrightCyan;
-        BrightWhite = other.BrightWhite;
-    }
-
-    /// <summary>
-    /// Creates a copy of this ThemeOptions.
-    /// </summary>
-    public ThemeOptions Clone()
-    {
-        return new ThemeOptions(this);
-    }
-
-    /// <summary>
-    /// Explicit interface implementation for ICloneable.
+    ///     Explicit interface implementation for ICloneable.
     /// </summary>
     object ICloneable.Clone()
     {
         return Clone();
     }
+
+    /// <summary>
+    ///     Creates a copy of this ThemeOptions.
+    /// </summary>
+    public ThemeOptions Clone()
+    {
+        return new ThemeOptions(this);
+    }
 }
 
 /// <summary>
-/// Key event information.
+///     Key event information.
 /// </summary>
 public class KeyEvent
 {

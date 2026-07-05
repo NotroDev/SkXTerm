@@ -1,11 +1,11 @@
 namespace XTerm.Common;
 
 /// <summary>
-/// Extension methods for parsing CSI command identifiers.
+///     Extension methods for parsing CSI command identifiers.
 /// </summary>
 public static class CsiCommandExtensions
 {
-    private static readonly Dictionary<string, CsiCommand> _commandMap = new()
+    private static readonly Dictionary<string, CsiCommand> CommandMap = new()
     {
         { "@", CsiCommand.InsertChars },
         { "A", CsiCommand.CursorUp },
@@ -42,49 +42,51 @@ public static class CsiCommandExtensions
         { "q", CsiCommand.SelectCursorStyle }
     };
 
-    /// <summary>
-    /// Converts a CSI identifier string to a CsiCommand enum value.
-    /// </summary>
     /// <param name="identifier">The CSI identifier (final character, possibly with prefix)</param>
-    /// <returns>The corresponding CsiCommand enum value, or Unknown if not recognized</returns>
-    public static CsiCommand ToCsiCommand(this string identifier)
+    extension(string identifier)
     {
-        // Handle DEC private mode sequences (e.g., "?h", "?l", ">c")
-        var cleaned = identifier.TrimStart('?', '>');
-        return _commandMap.GetValueOrDefault(cleaned, CsiCommand.Unknown);
-    }
-    
-    /// <summary>
-    /// Checks if a CSI identifier represents a DEC private mode sequence.
-    /// </summary>
-    /// <param name="identifier">The CSI identifier</param>
-    /// <returns>True if the identifier starts with '?' or '>', indicating a DEC private mode</returns>
-    public static bool IsPrivateMode(this string identifier)
-    {
-        return identifier.StartsWith('?') || identifier.StartsWith('>');
+        /// <summary>
+        ///     Converts a CSI identifier string to a CsiCommand enum value.
+        /// </summary>
+        /// <returns>The corresponding CsiCommand enum value, or Unknown if not recognized</returns>
+        public CsiCommand ToCsiCommand()
+        {
+            // Handle DEC private mode sequences (e.g., "?h", "?l", ">c")
+            string cleaned = identifier.TrimStart('?', '>');
+            return CommandMap.GetValueOrDefault(cleaned, CsiCommand.Unknown);
+        }
+
+        /// <summary>
+        ///     Checks if a CSI identifier represents a DEC private mode sequence.
+        /// </summary>
+        /// <returns>True if the identifier starts with '?' or '>', indicating a DEC private mode</returns>
+        public bool IsPrivateMode()
+        {
+            return identifier.StartsWith('?') || identifier.StartsWith('>');
+        }
     }
 }
 
 /// <summary>
-/// Extension methods for working with OSC commands.
+///     Extension methods for working with OSC commands.
 /// </summary>
 public static class OscCommandExtensions
 {
     /// <summary>
-    /// Tries to parse an OSC command string to an OscCommand enum value.
+    ///     Tries to parse an OSC command string to an OscCommand enum value.
     /// </summary>
     /// <param name="commandString">The command string (numeric identifier)</param>
     /// <param name="command">The parsed OscCommand enum value</param>
     /// <returns>True if parsing succeeded, false otherwise</returns>
     public static bool TryParseOscCommand(this string commandString, out OscCommand command)
     {
-        if (int.TryParse(commandString, out int commandValue) && 
+        if (int.TryParse(commandString, out int commandValue) &&
             Enum.IsDefined(typeof(OscCommand), commandValue))
         {
             command = (OscCommand)commandValue;
             return true;
         }
-        
+
         command = default;
         return false;
     }

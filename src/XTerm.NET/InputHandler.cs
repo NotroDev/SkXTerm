@@ -1,105 +1,80 @@
-using NeoSmart.Unicode;
+using System.Diagnostics;
 using System.Text;
+using NeoSmart.Unicode;
 using Wcwidth;
 using XTerm.Buffer;
 using XTerm.Common;
+using XTerm.Events;
 using XTerm.Input;
 using XTerm.Parser;
 
 namespace XTerm;
 
 /// <summary>
-/// Handles input escape sequences and updates the terminal buffer.
-/// Implements VT100/xterm escape sequence handlers.
+///     Handles input escape sequences and updates the terminal buffer.
+///     Implements VT100/xterm escape sequence handlers.
 /// </summary>
-public class InputHandler
+public class InputHandler(Terminal terminal)
 {
-    private readonly Terminal _terminal;
-    private Buffer.TerminalBuffer _buffer;
-    private AttributeData _curAttr;
-    private readonly Dictionary<CharsetMode, Dictionary<char, string>?> _charsets;
-    private CharsetMode _currentCharset;
-
     // Variation selector and combining character constants
-    private const int VariationSelectorEmojiSymbol = 0xFE0F;  // Emoji presentation selector
-    private const int VariationSelectorTextSymbol = 0xFE0E;   // Text presentation selector
-    private const int ZeroWidthJoiner = 0x200D;               // ZWJ for emoji sequences
-
-    public InputHandler(Terminal terminal)
+    private const int VARIATION_SELECTOR_EMOJI_SYMBOL = 0xFE0F; // Emoji presentation selector
+    private const int VARIATION_SELECTOR_TEXT_SYMBOL = 0xFE0E; // Text presentation selector
+    private const int ZERO_WIDTH_JOINER = 0x200D; // ZWJ for emoji sequences
+    private readonly Dictionary<CharsetMode, Dictionary<char, string>?> _charsets = new()
     {
-        _terminal = terminal;
-        _buffer = terminal.Buffer;
-        _curAttr = AttributeData.Default;
+        { CharsetMode.G0, Charsets.Ascii },
+        { CharsetMode.G1, Charsets.Ascii },
+        { CharsetMode.G2, Charsets.Ascii },
+        { CharsetMode.G3, Charsets.Ascii }
+    };
 
-        // Initialize charset tables - all start as ASCII
-        _charsets = new Dictionary<CharsetMode, Dictionary<char, string>?>
-        {
-            { CharsetMode.G0, Charsets.ASCII },
-            { CharsetMode.G1, Charsets.ASCII },
-            { CharsetMode.G2, Charsets.ASCII },
-            { CharsetMode.G3, Charsets.ASCII }
-        };
+    private TerminalBuffer _buffer = terminal.Buffer;
+    private AttributeData _curAttr = AttributeData.Default;
+    private CharsetMode _currentCharset = CharsetMode.G0; // G0 is active by default
 
-        _currentCharset = CharsetMode.G0; // G0 is active by default
-    }
+    // Initialize charset tables - all start as ASCII
 
     /// <summary>
-    /// Checks if a code point is a combining character that should be merged with the previous cell.
+    ///     Checks if a code point is a combining character that should be merged with the previous cell.
     /// </summary>
     private static bool IsCombiningCharacter(int codePoint)
     {
-        // Variation Selectors (U+FE00�U+FE0F)
-        if (codePoint >= 0xFE00 && codePoint <= 0xFE0F)
-            return true;
-
-        // Variation Selectors Supplement (U+E0100�U+E01EF)
-        if (codePoint >= 0xE0100 && codePoint <= 0xE01EF)
-            return true;
-
-        // Zero Width Joiner (U+200D)
-        if (codePoint == ZeroWidthJoiner)
-            return true;
-
-        // Combining Diacritical Marks (U+0300�U+036F)
-        if (codePoint >= 0x0300 && codePoint <= 0x036F)
-            return true;
-
-        // Combining Diacritical Marks Extended (U+1AB0�U+1AFF)
-        if (codePoint >= 0x1AB0 && codePoint <= 0x1AFF)
-            return true;
-
-        // Combining Diacritical Marks Supplement (U+1DC0�U+1DFF)
-        if (codePoint >= 0x1DC0 && codePoint <= 0x1DFF)
-            return true;
-
-        // Combining Diacritical Marks for Symbols (U+20D0�U+20FF)
-        if (codePoint >= 0x20D0 && codePoint <= 0x20FF)
-            return true;
-
-        // Combining Half Marks (U+FE20�U+FE2F)
-        if (codePoint >= 0xFE20 && codePoint <= 0xFE2F)
-            return true;
-
-        // Emoji Modifiers / Skin Tones (U+1F3FB�U+1F3FF)
-        if (codePoint >= 0x1F3FB && codePoint <= 0x1F3FF)
-            return true;
+        switch (codePoint)
+        {
+            // Variation Selectors (U+FE00�U+FE0F)
+            case >= 0xFE00 and <= 0xFE0F:
+            // Variation Selectors Supplement (U+E0100�U+E01EF)
+            case >= 0xE0100 and <= 0xE01EF:
+            // Zero Width Joiner (U+200D)
+            case ZERO_WIDTH_JOINER:
+            // Combining Diacritical Marks (U+0300�U+036F)
+            case >= 0x0300 and <= 0x036F:
+            // Combining Diacritical Marks Extended (U+1AB0�U+1AFF)
+            case >= 0x1AB0 and <= 0x1AFF:
+            // Combining Diacritical Marks Supplement (U+1DC0�U+1DFF)
+            case >= 0x1DC0 and <= 0x1DFF:
+            // Combining Diacritical Marks for Symbols (U+20D0�U+20FF)
+            case >= 0x20D0 and <= 0x20FF:
+            // Combining Half Marks (U+FE20�U+FE2F)
+            case >= 0xFE20 and <= 0xFE2F:
+            // Emoji Modifiers / Skin Tones (U+1F3FB�U+1F3FF)
+            case >= 0x1F3FB and <= 0x1F3FF:
+                return true;
+        }
 
         // Keycap combining sequence (U+20E3)
-        if (codePoint == 0x20E3)
-            return true;
-
-        return false;
+        return codePoint == 0x20E3;
     }
 
     /// <summary>
-    /// Prints a character to the buffer.
+    ///     Prints a character to the buffer.
     /// </summary>
     public void Print(string data)
     {
         // Check if this is a combining character that should be merged with the previous cell
         if (!string.IsNullOrEmpty(data))
         {
-            var codePoint = char.ConvertToUtf32(data, 0);
+            int codePoint = char.ConvertToUtf32(data, 0);
 
             if (IsCombiningCharacter(codePoint))
             {
@@ -114,9 +89,9 @@ public class InputHandler
 
 
         // Handle autowrap
-        if (_buffer.X >= _terminal.Cols)
+        if (_buffer.X >= terminal.Cols)
         {
-            if (_terminal.Options.Wraparound)
+            if (terminal.Options.Wraparound)
             {
                 if (_buffer.Y == _buffer.ScrollBottom)
                 {
@@ -127,6 +102,7 @@ public class InputHandler
                 {
                     _buffer.SetCursor(0, _buffer.Y + 1);
                 }
+
                 _buffer.Lines[_buffer.Y + _buffer.YBase]!.IsWrapped = true;
             }
             else
@@ -135,23 +111,25 @@ public class InputHandler
             }
         }
 
-        var line = _buffer.Lines[_buffer.Y + _buffer.YBase]; 
+        BufferLine? line = _buffer.Lines[_buffer.Y + _buffer.YBase];
         if (line == null)
+        {
             return;
+        }
 
         // Translate character through active charset
-        var translatedData = data;
+        string translatedData = data;
         if (data.Length == 1)
         {
-            var charset = _charsets.GetValueOrDefault(_currentCharset);
+            Dictionary<char, string>? charset = _charsets.GetValueOrDefault(_currentCharset);
             translatedData = Charsets.TranslateChar(data[0], charset);
         }
 
         // Get character width
-        var width = GetStringCellWidth(translatedData);
+        int width = GetStringCellWidth(translatedData);
 
         // Create cell
-        var cell = new BufferCell
+        BufferCell cell = new()
         {
             Content = translatedData,
             Width = width,
@@ -160,24 +138,24 @@ public class InputHandler
         };
 
         // Insert mode handling
-        if (_terminal.InsertMode)
+        if (terminal.InsertMode)
         {
             // Shift cells right
-            line?.CopyCellsFrom(line, _buffer.X, _buffer.X + width, _terminal.Cols - _buffer.X - width, false);
+            line.CopyCellsFrom(line, _buffer.X, _buffer.X + width, terminal.Cols - _buffer.X - width, false);
         }
 
         // Set the cell
-        line?.SetCell(_buffer.X, ref cell);
+        line.SetCell(_buffer.X, ref cell);
 
         // Handle wide characters
         if (width == 2)
         {
             // Set following cell as a spacer
-            if (_buffer.X + 1 < _terminal.Cols)
+            if (_buffer.X + 1 < terminal.Cols)
             {
-                var spacer = BufferCell.Empty;
+                BufferCell spacer = BufferCell.Empty;
                 spacer.Attributes = _curAttr;
-                line?.SetCell(_buffer.X + 1, ref spacer);
+                line.SetCell(_buffer.X + 1, ref spacer);
             }
         }
 
@@ -186,16 +164,18 @@ public class InputHandler
     }
 
     /// <summary>
-    /// Attempts to append a combining character to the previous cell.
+    ///     Attempts to append a combining character to the previous cell.
     /// </summary>
     /// <param name="data">The combining character string.</param>
     /// <param name="codePoint">The code point of the combining character.</param>
     /// <returns>True if successfully combined, false otherwise.</returns>
     private bool TryAppendToPreviousCell(string data, int codePoint)
     {
-        var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
+        BufferLine? line = _buffer.Lines[_buffer.Y + _buffer.YBase];
         if (line == null)
+        {
             return false;
+        }
 
         // Find the previous cell position
         int prevX = _buffer.X - 1;
@@ -206,14 +186,14 @@ public class InputHandler
             // Check if the previous line exists and is wrapped
             if (_buffer.Y > 0 || _buffer.YBase > 0)
             {
-                var prevLineIndex = _buffer.Y + _buffer.YBase - 1;
+                int prevLineIndex = _buffer.Y + _buffer.YBase - 1;
                 if (prevLineIndex >= 0)
                 {
-                    var prevLine = _buffer.Lines[prevLineIndex];
-                    if (prevLine != null && prevLine.IsWrapped)
+                    BufferLine? prevLine = _buffer.Lines[prevLineIndex];
+                    if (prevLine is { IsWrapped: true })
                     {
                         line = prevLine;
-                        prevX = _terminal.Cols - 1;
+                        prevX = terminal.Cols - 1;
                     }
                     else
                     {
@@ -233,9 +213,11 @@ public class InputHandler
 
         // Get the previous cell
         if (prevX < 0 || prevX >= line.Length)
+        {
             return false;
+        }
 
-        var prevCell = line[prevX];
+        BufferCell prevCell = line[prevX];
 
         // Skip placeholder cells (width 0) for wide characters - find the actual character cell
         while (prevX > 0 && prevCell.Width == 0)
@@ -253,62 +235,64 @@ public class InputHandler
         }
 
         // Append the combining character to the previous cell's content
-        var newContent = prevCell.Content + data;
+        string newContent = prevCell.Content + data;
 
         // Determine if we need to adjust the width
-        int newWidth = prevCell.Width;
 
-        // Handle variation selectors that change presentation
-        if (codePoint == VariationSelectorEmojiSymbol && prevCell.Width == 1)
+        int newWidth = codePoint switch
         {
-            // Emoji presentation selector: character becomes width 2
-            newWidth = 2;
-        }
-        else if (codePoint == VariationSelectorTextSymbol && prevCell.Width == 2)
-        {
-            // Text presentation selector: character becomes width 1
-            newWidth = 1;
-        }
+            // Handle variation selectors that change presentation
+            VARIATION_SELECTOR_EMOJI_SYMBOL when prevCell.Width == 1 => 2,
+            VARIATION_SELECTOR_TEXT_SYMBOL when prevCell.Width == 2 => 1,
+            _ => prevCell.Width
+        };
 
         // Create the updated cell
-        var updatedCell = new BufferCell
+        BufferCell updatedCell = new()
         {
             Content = newContent,
             Width = newWidth,
             Attributes = prevCell.Attributes,
-            CodePoint = prevCell.CodePoint  // Keep the original base code point
+            CodePoint = prevCell.CodePoint // Keep the original base code point
         };
 
         line.SetCell(prevX, ref updatedCell);
 
         // Handle width changes
-        if (newWidth != prevCell.Width)
+        if (newWidth == prevCell.Width)
         {
-            if (newWidth == 2 && prevCell.Width == 1)
+            return true;
+        }
+
+        switch (newWidth)
+        {
+            case 2 when prevCell.Width == 1:
             {
                 // Need to add a spacer cell after the character
                 // Check if cursor position needs adjustment
-                if (prevX + 1 < _terminal.Cols)
+                if (prevX + 1 < terminal.Cols)
                 {
                     // Use BufferCell.Spacer with the previous cell's attributes
-                    var spacer = BufferCell.Empty;
+                    BufferCell spacer = BufferCell.Empty;
                     spacer.Attributes = prevCell.Attributes;
                     line.SetCell(prevX + 1, ref spacer);
 
                     // Adjust cursor if we're after this cell
                     if (_buffer.X > prevX)
                     {
-                        _buffer.SetCursorRaw(Math.Min(_buffer.X + 1, _terminal.Cols), _buffer.Y);
+                        _buffer.SetCursorRaw(Math.Min(_buffer.X + 1, terminal.Cols), _buffer.Y);
                     }
                 }
+
+                break;
             }
-            else if (newWidth == 1 && prevCell.Width == 2)
+            case 1 when prevCell.Width == 2:
             {
                 // Remove the spacer cell by replacing with whitespace
-                if (prevX + 1 < _terminal.Cols)
+                if (prevX + 1 < terminal.Cols)
                 {
                     // Use BufferCell.Whitespace with the previous cell's attributes
-                    var emptyCell = BufferCell.Space;
+                    BufferCell emptyCell = BufferCell.Space;
                     emptyCell.Attributes = prevCell.Attributes;
                     line.SetCell(prevX + 1, ref emptyCell);
 
@@ -318,6 +302,8 @@ public class InputHandler
                         _buffer.SetCursorRaw(Math.Max(_buffer.X - 1, 0), _buffer.Y);
                     }
                 }
+
+                break;
             }
         }
 
@@ -325,12 +311,12 @@ public class InputHandler
     }
 
     /// <summary>
-    /// Handles CSI sequences (Control Sequence Introducer).
+    ///     Handles CSI sequences (Control Sequence Introducer).
     /// </summary>
     public void HandleCsi(string identifier, Params parameters)
     {
         bool isPrivate = identifier.IsPrivateMode();
-        var command = identifier.ToCsiCommand();
+        CsiCommand command = identifier.ToCsiCommand();
 
         switch (command)
         {
@@ -451,23 +437,23 @@ public class InputHandler
                 break;
 
             case CsiCommand.SetMode:
-                SetCSIModeParameters(parameters, isPrivate: isPrivate);
+                SetCsiModeParameters(parameters, isPrivate);
                 break;
 
             case CsiCommand.ResetMode:
                 // DEC Private Mode Reset (CSI ? Pm l)
-                ResetCSIModeParameters(parameters, isPrivate: isPrivate);
+                ResetCsiModeParameters(parameters, isPrivate);
                 break;
 
             case CsiCommand.Unknown:
                 // Log unknown sequence for debugging
-                System.Diagnostics.Debug.WriteLine($"Unknown CSI sequence: {identifier}");
+                Debug.WriteLine($"Unknown CSI sequence: {identifier}");
                 break;
         }
     }
 
     /// <summary>
-    /// Handles ESC sequences.
+    ///     Handles ESC sequences.
     /// </summary>
     public void HandleEsc(string finalChar, string collected)
     {
@@ -494,34 +480,40 @@ public class InputHandler
         }
 
         // Charset designation sequences
-        if (collected.Length > 0)
+        if (collected.Length <= 0)
         {
-            var intermediateChar = collected[0];
-            switch (intermediateChar)
-            {
-                case '(': // Designate G0 character set
-                    SetCharset(CharsetMode.G0, finalChar);
-                    break;
-                case ')': // Designate G1 character set
-                    SetCharset(CharsetMode.G1, finalChar);
-                    break;
-                case '*': // Designate G2 character set
-                    SetCharset(CharsetMode.G2, finalChar);
-                    break;
-                case '+': // Designate G3 character set
-                    SetCharset(CharsetMode.G3, finalChar);
-                    break;
-                case '#': // DEC line attribute sequences
-                    HandleDecLineAttribute(finalChar);
-                    break;
-            }
+            return;
+        }
+
+        char intermediateChar = collected[0];
+        switch (intermediateChar)
+        {
+            case '(': // Designate G0 character set
+                SetCharset(CharsetMode.G0, finalChar);
+                break;
+            case ')': // Designate G1 character set
+                SetCharset(CharsetMode.G1, finalChar);
+                break;
+            case '*': // Designate G2 character set
+                SetCharset(CharsetMode.G2, finalChar);
+                break;
+            case '+': // Designate G3 character set
+                SetCharset(CharsetMode.G3, finalChar);
+                break;
+            case '#': // DEC line attribute sequences
+                HandleDecLineAttribute(finalChar);
+                break;
         }
     }
 
     private void HandleDecLineAttribute(string finalChar)
     {
-        var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
-        if (line == null) return;
+        BufferLine? line = _buffer.Lines[_buffer.Y + _buffer.YBase];
+        if (line == null)
+        {
+            return;
+        }
+
         switch (finalChar)
         {
             case "3": line.LineAttribute = LineAttribute.DoubleHeightTop; break;
@@ -534,27 +526,30 @@ public class InputHandler
 
     private void FillScreenWithE()
     {
-        var cell = new BufferCell('E', 1, AttributeData.Default);
-        for (int row = 0; row < _terminal.Rows; row++)
+        BufferCell cell = new("E", 1, AttributeData.Default);
+        for (int row = 0; row < terminal.Rows; row++)
         {
-            var line = _buffer.Lines[_buffer.YBase + row];
-            if (line != null)
+            BufferLine? line = _buffer.Lines[_buffer.YBase + row];
+            if (line == null)
             {
-                line.LineAttribute = LineAttribute.Normal;
-                line.Fill(cell);
+                continue;
             }
+
+            line.LineAttribute = LineAttribute.Normal;
+            line.Fill(cell);
         }
+
         _buffer.SetCursor(0, 0);
     }
 
     private void SetCharset(CharsetMode mode, string charsetId)
     {
-        var charset = Charsets.GetCharset(charsetId);
+        Dictionary<char, string>? charset = Charsets.GetCharset(charsetId);
         _charsets[mode] = charset;
     }
 
     /// <summary>
-    /// Shift Out - Select G1 character set (SO, 0x0E).
+    ///     Shift Out - Select G1 character set (SO, 0x0E).
     /// </summary>
     public void ShiftOut()
     {
@@ -562,7 +557,7 @@ public class InputHandler
     }
 
     /// <summary>
-    /// Shift In - Select G0 character set (SI, 0x0F).
+    ///     Shift In - Select G0 character set (SI, 0x0F).
     /// </summary>
     public void ShiftIn()
     {
@@ -570,27 +565,29 @@ public class InputHandler
     }
 
     /// <summary>
-    /// Resets charset state to defaults.
+    ///     Resets charset state to defaults.
     /// </summary>
     public void ResetCharsets()
     {
-        _charsets[CharsetMode.G0] = Charsets.ASCII;
-        _charsets[CharsetMode.G1] = Charsets.ASCII;
-        _charsets[CharsetMode.G2] = Charsets.ASCII;
-        _charsets[CharsetMode.G3] = Charsets.ASCII;
+        _charsets[CharsetMode.G0] = Charsets.Ascii;
+        _charsets[CharsetMode.G1] = Charsets.Ascii;
+        _charsets[CharsetMode.G2] = Charsets.Ascii;
+        _charsets[CharsetMode.G3] = Charsets.Ascii;
         _currentCharset = CharsetMode.G0;
     }
 
     /// <summary>
-    /// Handles OSC sequences (Operating System Command).
+    ///     Handles OSC sequences (Operating System Command).
     /// </summary>
     public void HandleOsc(string data)
     {
-        var parts = data.Split(new[] { ';' }, 2);
+        string[] parts = data.Split([';'], 2);
         if (parts.Length == 0)
+        {
             return;
+        }
 
-        var arg = parts.Length > 1 ? parts[1] : string.Empty;
+        string arg = parts.Length > 1 ? parts[1] : string.Empty;
 
         // Try to parse as OscCommand enum
         if (parts[0].TryParseOscCommand(out OscCommand command))
@@ -599,8 +596,8 @@ public class InputHandler
             {
                 case OscCommand.SetIconAndTitle:
                 case OscCommand.SetWindowTitle:
-                    _terminal.Title = arg;
-                    _terminal.RaiseTitleChanged(arg);
+                    terminal.Title = arg;
+                    terminal.RaiseTitleChanged(arg);
                     break;
 
                 case OscCommand.SetIconName:
@@ -644,14 +641,14 @@ public class InputHandler
 
                 default:
                     // Known but unhandled command
-                    System.Diagnostics.Debug.WriteLine($"Unhandled OSC command: {command}");
+                    Debug.WriteLine($"Unhandled OSC command: {command}");
                     break;
             }
         }
         else
         {
             // Unknown or unsupported OSC sequence
-            System.Diagnostics.Debug.WriteLine($"Unknown OSC sequence: {parts[0]}");
+            Debug.WriteLine($"Unknown OSC sequence: {parts[0]}");
         }
     }
 
@@ -661,7 +658,7 @@ public class InputHandler
         // Example: OSC 4;1;rgb:ff/00/00 ST (set color 1 to red)
         // For now, we just acknowledge but don't actually change colors
         // A full implementation would parse the color and store it
-        var parts = data.Split(';');
+        string[] parts = data.Split(';');
         if (parts.Length >= 2)
         {
             // Color index in parts[0], color spec in parts[1]
@@ -676,13 +673,13 @@ public class InputHandler
         if (data.StartsWith("file://"))
         {
             // Extract path from file:// URL
-            var uri = data.Substring(7); // Remove "file://"
-            var slashIndex = uri.IndexOf('/');
+            string uri = data.Substring(7); // Remove "file://"
+            int slashIndex = uri.IndexOf('/');
             if (slashIndex >= 0)
             {
-                var path = uri.Substring(slashIndex);
-                _terminal.CurrentDirectory = Uri.UnescapeDataString(path);
-                _terminal.RaiseDirectoryChanged(_terminal.CurrentDirectory);
+                string path = uri.Substring(slashIndex);
+                terminal.CurrentDirectory = Uri.UnescapeDataString(path);
+                terminal.RaiseDirectoryChanged(terminal.CurrentDirectory);
             }
         }
     }
@@ -692,39 +689,39 @@ public class InputHandler
         // OSC 8 ; params ; URI ST
         // Example: OSC 8;;http://example.com ST (start link)
         //          OSC 8;; ST (end link)
-        var parts = data.Split(new[] { ';' }, 2);
+        string[] parts = data.Split([';'], 2);
 
         if (parts.Length >= 2)
         {
-            var params_ = parts[0];
-            var uri = parts[1];
+            string @params = parts[0];
+            string uri = parts[1];
 
             if (string.IsNullOrEmpty(uri))
             {
                 // End hyperlink
-                _terminal.CurrentHyperlink = null;
-                _terminal.HyperlinkId = null;
-                _terminal.RaiseHyperlinkChanged(null);
+                terminal.CurrentHyperlink = null;
+                terminal.HyperlinkId = null;
+                terminal.RaiseHyperlinkChanged(null);
             }
             else
             {
                 // Start hyperlink
-                _terminal.CurrentHyperlink = uri;
+                terminal.CurrentHyperlink = uri;
 
                 // Parse params for id= parameter
-                if (!string.IsNullOrEmpty(params_))
+                if (!string.IsNullOrEmpty(@params))
                 {
-                    var paramParts = params_.Split(':');
-                    foreach (var p in paramParts)
+                    string[] paramParts = @params.Split(':');
+                    foreach (string p in paramParts)
                     {
                         if (p.StartsWith("id="))
                         {
-                            _terminal.HyperlinkId = p.Substring(3);
+                            terminal.HyperlinkId = p.Substring(3);
                         }
                     }
                 }
 
-                _terminal.RaiseHyperlinkChanged(uri);
+                terminal.RaiseHyperlinkChanged(uri);
             }
         }
     }
@@ -740,15 +737,15 @@ public class InputHandler
             // For now, return a default response
             string response = colorType switch
             {
-                "10" => $"\u001b]{colorType};rgb:ff/ff/ff\u0007",  // Foreground
-                "11" => $"\u001b]{colorType};rgb:00/00/00\u0007",  // Background
-                "12" => $"\u001b]{colorType};rgb:ff/ff/ff\u0007",  // Cursor
+                "10" => $"\e]{colorType};rgb:ff/ff/ff\a", // Foreground
+                "11" => $"\e]{colorType};rgb:00/00/00\a", // Background
+                "12" => $"\e]{colorType};rgb:ff/ff/ff\a", // Cursor
                 _ => string.Empty
             };
 
             if (!string.IsNullOrEmpty(response))
             {
-                _terminal.RaiseDataReceived(response);
+                terminal.RaiseDataReceived(response);
             }
         }
         else if (!string.IsNullOrEmpty(data))
@@ -762,35 +759,37 @@ public class InputHandler
     {
         // OSC 52 ; c ; data ST
         // Example: OSC 52;c;base64data ST
-        var parts = data.Split(new[] { ';' }, 2);
+        string[] parts = data.Split([';'], 2);
 
-        if (parts.Length >= 2)
+        if (parts.Length < 2)
         {
-            var target = parts[0]; // Usually 'c' for clipboard, 'p' for primary
-            var clipdata = parts[1];
+            return;
+        }
 
-            if (clipdata == "?")
+        string target = parts[0]; // Usually 'c' for clipboard, 'p' for primary
+        string clipdata = parts[1];
+
+        if (clipdata == "?")
+        {
+            // Query clipboard - respond with clipboard content
+            // Format: OSC 52 ; c ; base64data ST
+            // For security, many terminals don't support this
+            // We'll send an empty response
+            terminal.RaiseDataReceived($"\e]52;{target};\a");
+        }
+        else
+        {
+            // Set clipboard
+            try
             {
-                // Query clipboard - respond with clipboard content
-                // Format: OSC 52 ; c ; base64data ST
-                // For security, many terminals don't support this
-                // We'll send an empty response
-                _terminal.RaiseDataReceived($"\u001b]52;{target};\u0007");
+                byte[] decoded = Convert.FromBase64String(clipdata);
+                string text = Encoding.UTF8.GetString(decoded);
+                // TODO: Integrate with system clipboard
+                // For now, we just acknowledge receipt
             }
-            else
+            catch
             {
-                // Set clipboard
-                try
-                {
-                    var decoded = Convert.FromBase64String(clipdata);
-                    var text = System.Text.Encoding.UTF8.GetString(decoded);
-                    // TODO: Integrate with system clipboard
-                    // For now, we just acknowledge receipt
-                }
-                catch
-                {
-                    // Invalid base64 or encoding
-                }
+                // Invalid base64 or encoding
             }
         }
     }
@@ -806,81 +805,84 @@ public class InputHandler
 
     private void CursorUp(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(_buffer.X, Math.Max(_buffer.Y - count, 0));
     }
 
     private void CursorDown(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
-        _buffer.SetCursor(_buffer.X, Math.Min(_buffer.Y + count, _terminal.Rows - 1));
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
+        _buffer.SetCursor(_buffer.X, Math.Min(_buffer.Y + count, terminal.Rows - 1));
     }
 
     private void CursorForward(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
-        _buffer.SetCursor(Math.Min(_buffer.X + count, _terminal.Cols - 1), _buffer.Y);
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
+        _buffer.SetCursor(Math.Min(_buffer.X + count, terminal.Cols - 1), _buffer.Y);
     }
 
     private void CursorBackward(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(Math.Max(_buffer.X - count, 0), _buffer.Y);
     }
 
     private void CursorNextLine(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
-        _buffer.SetCursor(0, Math.Min(_buffer.Y + count, _terminal.Rows - 1));
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
+        _buffer.SetCursor(0, Math.Min(_buffer.Y + count, terminal.Rows - 1));
     }
 
     private void CursorPrecedingLine(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.SetCursor(0, Math.Max(_buffer.Y - count, 0));
     }
 
     private void CursorCharAbsolute(Params parameters)
     {
-        var col = Math.Max(parameters.GetParam(0, 1), 1) - 1;
+        int col = Math.Max(parameters.GetParam(0, 1), 1) - 1;
         _buffer.SetCursor(col, _buffer.Y);
     }
 
     private void CursorPosition(Params parameters)
     {
-        var row = Math.Max(parameters.GetParam(0, 1), 1) - 1;
-        var col = Math.Max(parameters.GetParam(1, 1), 1) - 1;
+        int row = Math.Max(parameters.GetParam(0, 1), 1) - 1;
+        int col = Math.Max(parameters.GetParam(1, 1), 1) - 1;
         row = GetAbsoluteCursorRow(row);
         _buffer.SetCursor(col, row);
     }
 
     private void EraseInDisplay(Params parameters)
     {
-        var mode = parameters.GetParam(0, 0);
-        var emptyCell = BufferCell.Space;
+        int mode = parameters.GetParam(0);
+        BufferCell emptyCell = BufferCell.Space;
         emptyCell.Attributes = _curAttr;
 
         switch (mode)
         {
             case 0: // Erase below
                 EraseInLine(parameters); // Current line from cursor
-                for (int i = _buffer.Y + 1; i < _terminal.Rows; i++)
+                for (int i = _buffer.Y + 1; i < terminal.Rows; i++)
                 {
                     _buffer.Lines[_buffer.YBase + i]?.Fill(emptyCell);
                 }
+
                 break;
             case 1: // Erase above
                 for (int i = 0; i < _buffer.Y; i++)
                 {
                     _buffer.Lines[_buffer.YBase + i]?.Fill(emptyCell);
                 }
+
                 EraseInLine(parameters); // Current line to cursor
                 break;
             case 2: // Erase all
-                for (int i = 0; i < _terminal.Rows; i++)
+                for (int i = 0; i < terminal.Rows; i++)
                 {
                     _buffer.Lines[_buffer.YBase + i]?.Fill(emptyCell);
                 }
+
                 break;
             case 3: // Erase scrollback
                 _buffer.EraseScrollback();
@@ -890,18 +892,20 @@ public class InputHandler
 
     private void EraseInLine(Params parameters)
     {
-        var mode = parameters.GetParam(0, 0);
-        var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
+        int mode = parameters.GetParam(0);
+        BufferLine? line = _buffer.Lines[_buffer.Y + _buffer.YBase];
         if (line == null)
+        {
             return;
+        }
 
-        var emptyCell = BufferCell.Space;
+        BufferCell emptyCell = BufferCell.Space;
         emptyCell.Attributes = _curAttr;
 
         switch (mode)
         {
             case 0: // Erase to right
-                line.Fill(emptyCell, _buffer.X, _terminal.Cols);
+                line.Fill(emptyCell, _buffer.X, terminal.Cols);
                 break;
             case 1: // Erase to left
                 line.Fill(emptyCell, 0, _buffer.X + 1);
@@ -914,10 +918,12 @@ public class InputHandler
 
     private void InsertLines(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
         // Only works in scroll region
         if (_buffer.Y < _buffer.ScrollTop || _buffer.Y > _buffer.ScrollBottom)
+        {
             return;
+        }
 
         for (int i = 0; i < count; i++)
         {
@@ -929,10 +935,12 @@ public class InputHandler
 
     private void DeleteLines(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
         // Only works in scroll region
         if (_buffer.Y < _buffer.ScrollTop || _buffer.Y > _buffer.ScrollBottom)
+        {
             return;
+        }
 
         for (int i = 0; i < count; i++)
         {
@@ -944,61 +952,65 @@ public class InputHandler
 
     private void InsertChars(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
-        var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
+        BufferLine? line = _buffer.Lines[_buffer.Y + _buffer.YBase];
         if (line == null)
+        {
             return;
+        }
 
         // Shift cells right from cursor position
         line.CopyCellsFrom(line, _buffer.X, _buffer.X + count,
-            _terminal.Cols - _buffer.X - count, false);
+            terminal.Cols - _buffer.X - count, false);
 
         // Blank the inserted cells at cursor position
-        var emptyCell = BufferCell.Space;
+        BufferCell emptyCell = BufferCell.Space;
         emptyCell.Attributes = _curAttr;
-        line.Fill(emptyCell, _buffer.X, Math.Min(_buffer.X + count, _terminal.Cols));
+        line.Fill(emptyCell, _buffer.X, Math.Min(_buffer.X + count, terminal.Cols));
     }
 
     private void DeleteChars(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
-        var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
+        BufferLine? line = _buffer.Lines[_buffer.Y + _buffer.YBase];
         if (line == null)
+        {
             return;
+        }
 
         // Limit count to remaining characters on line
-        var remaining = _terminal.Cols - _buffer.X;
+        int remaining = terminal.Cols - _buffer.X;
         count = Math.Min(count, remaining);
 
         line.CopyCellsFrom(line, _buffer.X + count, _buffer.X,
-            _terminal.Cols - _buffer.X - count, false);
+            terminal.Cols - _buffer.X - count, false);
 
         // Fill vacated cells at right edge with current attributes (BCE)
-        var emptyCell = BufferCell.Space;
+        BufferCell emptyCell = BufferCell.Space;
         emptyCell.Attributes = _curAttr;
-        line.Fill(emptyCell, _terminal.Cols - count, _terminal.Cols);
+        line.Fill(emptyCell, terminal.Cols - count, terminal.Cols);
     }
 
     private void EraseChars(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
-        var line = _buffer.Lines[_buffer.Y + _buffer.YBase];
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
+        BufferLine? line = _buffer.Lines[_buffer.Y + _buffer.YBase];
 
-        var emptyCell = BufferCell.Space;
+        BufferCell emptyCell = BufferCell.Space;
         emptyCell.Attributes = _curAttr;
 
-        line?.Fill(emptyCell, _buffer.X, Math.Min(_buffer.X + count, _terminal.Cols));
+        line?.Fill(emptyCell, _buffer.X, Math.Min(_buffer.X + count, terminal.Cols));
     }
 
     private void ScrollUp(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.ScrollUp(count);
     }
 
     private void ScrollDown(Params parameters)
     {
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
         _buffer.ScrollDown(count);
     }
 
@@ -1017,7 +1029,7 @@ public class InputHandler
     private void LinePositionAbsolute(Params parameters)
     {
         // VPA - Line Position Absolute (CSI d)
-        var row = Math.Max(parameters.GetParam(0, 1), 1) - 1;
+        int row = Math.Max(parameters.GetParam(0, 1), 1) - 1;
         row = GetAbsoluteCursorRow(row);
         _buffer.SetCursor(_buffer.X, row);
     }
@@ -1025,28 +1037,30 @@ public class InputHandler
     private void CursorForwardTab(Params parameters)
     {
         // CHT - Cursor Forward Tabulation (CSI I)
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
-        var tabWidth = _terminal.Options.TabStopWidth;
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
+        int tabWidth = terminal.Options.TabStopWidth;
 
         for (int i = 0; i < count; i++)
         {
-            var nextTabStop = ((_buffer.X / tabWidth) + 1) * tabWidth;
-            _buffer.SetCursor(Math.Min(nextTabStop, _terminal.Cols - 1), _buffer.Y);
+            int nextTabStop = ((_buffer.X / tabWidth) + 1) * tabWidth;
+            _buffer.SetCursor(Math.Min(nextTabStop, terminal.Cols - 1), _buffer.Y);
         }
     }
 
     private void CursorBackwardTab(Params parameters)
     {
         // CBT - Cursor Backward Tabulation (CSI Z)
-        var count = Math.Max(parameters.GetParam(0, 1), 1);
-        var tabWidth = _terminal.Options.TabStopWidth;
+        int count = Math.Max(parameters.GetParam(0, 1), 1);
+        int tabWidth = terminal.Options.TabStopWidth;
 
         for (int i = 0; i < count; i++)
         {
             if (_buffer.X == 0)
+            {
                 break;
+            }
 
-            var prevTabStop = ((_buffer.X - 1) / tabWidth) * tabWidth;
+            int prevTabStop = (_buffer.X - 1) / tabWidth * tabWidth;
             _buffer.SetCursor(Math.Max(prevTabStop, 0), _buffer.Y);
         }
     }
@@ -1058,7 +1072,7 @@ public class InputHandler
         // Ps = 3: Clear all tab stops
         // Note: We use fixed tab stops, so this is acknowledged but has no effect
         // A full implementation would maintain a list of custom tab stops
-        var mode = parameters.GetParam(0, 0);
+        int mode = parameters.GetParam(0);
         switch (mode)
         {
             case 0:
@@ -1078,7 +1092,7 @@ public class InputHandler
             // Secondary DA (CSI > c) - Report terminal ID and version
             // Response: CSI > 0 ; version ; 0 c
             // We report as VT100-compatible
-            _terminal.RaiseDataReceived("\u001b[>0;10;0c");
+            terminal.RaiseDataReceived("\e[>0;10;0c");
         }
         else
         {
@@ -1086,14 +1100,14 @@ public class InputHandler
             // Response: CSI ? 1 ; 2 c (VT100 with AVO)
             // More complete: CSI ? 1 ; 2 ; 6 ; 9 c
             // 1 = 132 columns, 2 = Printer, 6 = Selective erase, 9 = National replacement character sets
-            _terminal.RaiseDataReceived("\u001b[?1;2c");
+            terminal.RaiseDataReceived("\e[?1;2c");
         }
     }
 
     private void DeviceStatusReport(Params parameters, bool isPrivate)
     {
         // DSR - Device Status Report (CSI n or CSI ? n)
-        var report = parameters.GetParam(0, 0);
+        int report = parameters.GetParam(0);
 
         if (isPrivate)
         {
@@ -1102,24 +1116,24 @@ public class InputHandler
             {
                 case 6: // DECXCPR - Extended Cursor Position Report
                     // Report cursor position: CSI ? row ; col R
-                    var row = _buffer.Y + 1; // 1-based
-                    var col = _buffer.X + 1; // 1-based
-                    _terminal.RaiseDataReceived($"\u001b[?{row};{col}R");
+                    int row = _buffer.Y + 1; // 1-based
+                    int col = _buffer.X + 1; // 1-based
+                    terminal.RaiseDataReceived($"\e[?{row};{col}R");
                     break;
 
                 case 15: // Printer status
                     // Report no printer: CSI ? 1 3 n
-                    _terminal.RaiseDataReceived("\u001b[?13n");
+                    terminal.RaiseDataReceived("\e[?13n");
                     break;
 
                 case 25: // UDK status
                     // Report UDK locked: CSI ? 2 1 n
-                    _terminal.RaiseDataReceived("\u001b[?21n");
+                    terminal.RaiseDataReceived("\e[?21n");
                     break;
 
                 case 26: // Keyboard status
                     // Report keyboard ready: CSI ? 2 7 ; 1 ; 0 ; 0 n
-                    _terminal.RaiseDataReceived("\u001b[?27;1;0;0n");
+                    terminal.RaiseDataReceived("\e[?27;1;0;0n");
                     break;
             }
         }
@@ -1130,21 +1144,21 @@ public class InputHandler
             {
                 case 5: // Operating status
                     // Report OK: CSI 0 n
-                    _terminal.RaiseDataReceived("\u001b[0n");
+                    terminal.RaiseDataReceived("\e[0n");
                     break;
 
                 case 6: // CPR - Cursor Position Report
                     // Report cursor position: CSI row ; col R
-                    var row = _buffer.Y + 1; // 1-based
-                    var col = _buffer.X + 1; // 1-based
+                    int row = _buffer.Y + 1; // 1-based
+                    int col = _buffer.X + 1; // 1-based
 
                     // Adjust for origin mode
-                    if (_terminal.OriginMode)
+                    if (terminal.OriginMode)
                     {
                         row = row - _buffer.ScrollTop;
                     }
 
-                    _terminal.RaiseDataReceived($"\u001b[{row};{col}R");
+                    terminal.RaiseDataReceived($"\e[{row};{col}R");
                     break;
             }
         }
@@ -1160,7 +1174,7 @@ public class InputHandler
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            var param = parameters.GetParam(i, 0);
+            int param = parameters.GetParam(i);
 
             switch (param)
             {
@@ -1244,32 +1258,43 @@ public class InputHandler
     private int HandleExtendedColor(Params parameters, int index, bool isForeground)
     {
         if (index + 1 >= parameters.Length)
+        {
             return index;
+        }
 
-        var colorType = parameters.GetParam(index + 1, 0);
+        int colorType = parameters.GetParam(index + 1);
 
         if (colorType == 2 && index + 4 < parameters.Length) // RGB
         {
-            var r = parameters.GetParam(index + 2, 0);
-            var g = parameters.GetParam(index + 3, 0);
-            var b = parameters.GetParam(index + 4, 0);
-            var rgb = (r << 16) | (g << 8) | b;
+            int r = parameters.GetParam(index + 2);
+            int g = parameters.GetParam(index + 3);
+            int b = parameters.GetParam(index + 4);
+            int rgb = (r << 16) | (g << 8) | b;
 
             if (isForeground)
+            {
                 _curAttr.SetFgColor(rgb, 1);
+            }
             else
+            {
                 _curAttr.SetBgColor(rgb, 1);
+            }
 
             return index + 4;
         }
-        else if (colorType == 5 && index + 2 < parameters.Length) // 256 color
+
+        if (colorType == 5 && index + 2 < parameters.Length) // 256 color
         {
-            var color = parameters.GetParam(index + 2, 0);
+            int color = parameters.GetParam(index + 2);
 
             if (isForeground)
+            {
                 _curAttr.SetFgColor(color);
+            }
             else
+            {
                 _curAttr.SetBgColor(color);
+            }
 
             return index + 2;
         }
@@ -1279,26 +1304,26 @@ public class InputHandler
 
     private void SetScrollRegion(Params parameters)
     {
-        var top = Math.Max(parameters.GetParam(0, 1), 1) - 1;
-        var bottom = Math.Max(parameters.GetParam(1, _terminal.Rows), 1) - 1;
+        int top = Math.Max(parameters.GetParam(0, 1), 1) - 1;
+        int bottom = Math.Max(parameters.GetParam(1, terminal.Rows), 1) - 1;
         _buffer.SetScrollRegion(top, bottom);
         MoveCursorToHome();
     }
 
     private int GetAbsoluteCursorRow(int row)
     {
-        if (_terminal.OriginMode)
+        if (terminal.OriginMode)
         {
             long absoluteRow = (long)_buffer.ScrollTop + row;
             return (int)Math.Clamp(absoluteRow, _buffer.ScrollTop, _buffer.ScrollBottom);
         }
 
-        return Math.Clamp(row, 0, _terminal.Rows - 1);
+        return Math.Clamp(row, 0, terminal.Rows - 1);
     }
 
     private void MoveCursorToHome()
     {
-        var row = _terminal.OriginMode ? _buffer.ScrollTop : 0;
+        int row = terminal.OriginMode ? _buffer.ScrollTop : 0;
         _buffer.SetCursor(0, row);
     }
 
@@ -1306,204 +1331,229 @@ public class InputHandler
     {
         // CSI Ps ; Ps ; Ps t - Window manipulation (XTWINOPS)
         // Check WindowOptions permissions before firing events
-        var operation = parameters.GetParam(0, 0);
+        int operation = parameters.GetParam(0);
 
         switch (operation)
         {
             case 1: // De-iconify window (restore from minimized)
-                if (_terminal.Options.WindowOptions.RestoreWin)
+                if (terminal.Options.WindowOptions.RestoreWin)
                 {
-                    _terminal.RaiseWindowRestored();
+                    terminal.RaiseWindowRestored();
                 }
+
                 break;
 
             case 2: // Iconify window (minimize)
-                if (_terminal.Options.WindowOptions.MinimizeWin)
+                if (terminal.Options.WindowOptions.MinimizeWin)
                 {
-                    _terminal.RaiseWindowMinimized();
+                    terminal.RaiseWindowMinimized();
                 }
+
                 break;
 
             case 3: // Move window to x, y
-                if (_terminal.Options.WindowOptions.SetWinPosition)
+                if (terminal.Options.WindowOptions.SetWinPosition)
                 {
-                    var x = parameters.GetParam(1, 0);
-                    var y = parameters.GetParam(2, 0);
-                    _terminal.RaiseWindowMoved(x, y);
+                    int x = parameters.GetParam(1);
+                    int y = parameters.GetParam(2);
+                    terminal.RaiseWindowMoved(x, y);
                 }
+
                 break;
 
             case 4: // Resize window to height, width pixels
-                if (_terminal.Options.WindowOptions.SetWinSizePixels)
+                if (terminal.Options.WindowOptions.SetWinSizePixels)
                 {
-                    var height = parameters.GetParam(1, 0);
-                    var width = parameters.GetParam(2, 0);
-                    _terminal.RaiseWindowResized(width, height);
+                    int height = parameters.GetParam(1);
+                    int width = parameters.GetParam(2);
+                    terminal.RaiseWindowResized(width, height);
                 }
+
                 break;
 
             case 5: // Raise window to front
-                if (_terminal.Options.WindowOptions.RaiseWin)
+                if (terminal.Options.WindowOptions.RaiseWin)
                 {
-                    _terminal.RaiseWindowRaised();
+                    terminal.RaiseWindowRaised();
                 }
+
                 break;
 
             case 6: // Lower window to back
-                if (_terminal.Options.WindowOptions.LowerWin)
+                if (terminal.Options.WindowOptions.LowerWin)
                 {
-                    _terminal.RaiseWindowLowered();
+                    terminal.RaiseWindowLowered();
                 }
+
                 break;
 
             case 7: // Refresh window
-                if (_terminal.Options.WindowOptions.RefreshWin)
+                if (terminal.Options.WindowOptions.RefreshWin)
                 {
-                    _terminal.RaiseWindowRefreshed();
+                    terminal.RaiseWindowRefreshed();
                 }
+
                 break;
 
             case 8: // Resize text area to height, width characters
-                if (_terminal.Options.WindowOptions.SetWinSizeChars)
+                if (terminal.Options.WindowOptions.SetWinSizeChars)
                 {
-                    var rows = parameters.GetParam(1, 0);
-                    var cols = parameters.GetParam(2, 0);
+                    int rows = parameters.GetParam(1);
+                    int cols = parameters.GetParam(2);
                     if (rows > 0 && cols > 0)
                     {
-                        _terminal.Resize(cols, rows);
+                        terminal.Resize(cols, rows);
                     }
                 }
+
                 break;
 
             case 9: // Maximize/restore operations
-                var subOp = parameters.GetParam(1, 0);
-                if (subOp == 0 && _terminal.Options.WindowOptions.RestoreWin)
+                int subOp = parameters.GetParam(1);
+                if (subOp == 0 && terminal.Options.WindowOptions.RestoreWin)
                 {
                     // Restore maximized window
-                    _terminal.RaiseWindowRestored();
+                    terminal.RaiseWindowRestored();
                 }
-                else if (subOp == 1 && _terminal.Options.WindowOptions.MaximizeWin)
+                else if (subOp == 1 && terminal.Options.WindowOptions.MaximizeWin)
                 {
                     // Maximize window
-                    _terminal.RaiseWindowMaximized();
+                    terminal.RaiseWindowMaximized();
                 }
+
                 break;
 
             case 10: // Full-screen operations
-                subOp = parameters.GetParam(1, 0);
-                if (subOp == 0 && _terminal.Options.WindowOptions.FullscreenWin)
+                subOp = parameters.GetParam(1);
+                if (subOp == 0 && terminal.Options.WindowOptions.FullscreenWin)
                 {
                     // Exit full-screen
-                    _terminal.RaiseWindowFullscreened();
+                    terminal.RaiseWindowFullscreened();
                 }
-                else if (subOp == 1 && _terminal.Options.WindowOptions.FullscreenWin)
+                else if (subOp == 1 && terminal.Options.WindowOptions.FullscreenWin)
                 {
                     // Enter full-screen
-                    _terminal.RaiseWindowFullscreened();
+                    terminal.RaiseWindowFullscreened();
                 }
-                else if (subOp == 2 && _terminal.Options.WindowOptions.FullscreenWin)
+                else if (subOp == 2 && terminal.Options.WindowOptions.FullscreenWin)
                 {
                     // Toggle full-screen
-                    _terminal.RaiseWindowFullscreened();
+                    terminal.RaiseWindowFullscreened();
                 }
+
                 break;
 
             case 11: // Report window state (iconified or not)
-                if (_terminal.Options.WindowOptions.GetWinState)
+                if (terminal.Options.WindowOptions.GetWinState)
                 {
-                    var args = _terminal.RaiseWindowInfoRequested(WindowInfoRequest.State);
+                    TerminalEvents.WindowInfoRequestedEventArgs args =
+                        terminal.RaiseWindowInfoRequested(WindowInfoRequest.State);
                     if (args.Handled)
                     {
                         // Response: CSI 1 t (not iconified) or CSI 2 t (iconified)
-                        var stateCode = args.IsIconified ? 2 : 1;
-                        _terminal.RaiseDataReceived($"\u001b[{stateCode}t");
+                        int stateCode = args.IsIconified ? 2 : 1;
+                        terminal.RaiseDataReceived($"\e[{stateCode}t");
                     }
                 }
+
                 break;
 
             case 13: // Report window position
-                if (_terminal.Options.WindowOptions.GetWinPosition)
+                if (terminal.Options.WindowOptions.GetWinPosition)
                 {
-                    var args = _terminal.RaiseWindowInfoRequested(WindowInfoRequest.Position);
+                    TerminalEvents.WindowInfoRequestedEventArgs args =
+                        terminal.RaiseWindowInfoRequested(WindowInfoRequest.Position);
                     if (args.Handled)
                     {
                         // Response: CSI 3 ; x ; y t
-                        _terminal.RaiseDataReceived($"\u001b[3;{args.X};{args.Y}t");
+                        terminal.RaiseDataReceived($"\e[3;{args.X};{args.Y}t");
                     }
                 }
+
                 break;
 
             case 14: // Report window size in pixels
-                if (_terminal.Options.WindowOptions.GetWinSizePixels)
+                if (terminal.Options.WindowOptions.GetWinSizePixels)
                 {
-                    var args = _terminal.RaiseWindowInfoRequested(WindowInfoRequest.SizePixels);
+                    TerminalEvents.WindowInfoRequestedEventArgs args =
+                        terminal.RaiseWindowInfoRequested(WindowInfoRequest.SizePixels);
                     if (args.Handled)
                     {
                         // Response: CSI 4 ; height ; width t
-                        _terminal.RaiseDataReceived($"\u001b[4;{args.HeightPixels};{args.WidthPixels}t");
+                        terminal.RaiseDataReceived($"\e[4;{args.HeightPixels};{args.WidthPixels}t");
                     }
                 }
+
                 break;
 
             case 15: // Report screen size in pixels
-                if (_terminal.Options.WindowOptions.GetScreenSizePixels)
+                if (terminal.Options.WindowOptions.GetScreenSizePixels)
                 {
-                    var args = _terminal.RaiseWindowInfoRequested(WindowInfoRequest.ScreenSizePixels);
+                    TerminalEvents.WindowInfoRequestedEventArgs args =
+                        terminal.RaiseWindowInfoRequested(WindowInfoRequest.ScreenSizePixels);
                     if (args.Handled)
                     {
                         // Response: CSI 5 ; height ; width t
-                        _terminal.RaiseDataReceived($"\u001b[5;{args.HeightPixels};{args.WidthPixels}t");
+                        terminal.RaiseDataReceived($"\e[5;{args.HeightPixels};{args.WidthPixels}t");
                     }
                 }
+
                 break;
 
             case 16: // Report character cell size in pixels
-                if (_terminal.Options.WindowOptions.GetCellSizePixels)
+                if (terminal.Options.WindowOptions.GetCellSizePixels)
                 {
-                    var args = _terminal.RaiseWindowInfoRequested(WindowInfoRequest.CellSizePixels);
+                    TerminalEvents.WindowInfoRequestedEventArgs args =
+                        terminal.RaiseWindowInfoRequested(WindowInfoRequest.CellSizePixels);
                     if (args.Handled)
                     {
                         // Response: CSI 6 ; height ; width t
-                        _terminal.RaiseDataReceived($"\u001b[6;{args.CellHeight};{args.CellWidth}t");
+                        terminal.RaiseDataReceived($"\e[6;{args.CellHeight};{args.CellWidth}t");
                     }
                 }
+
                 break;
 
             case 18: // Report text area size in characters
-                if (_terminal.Options.WindowOptions.GetWinSizeChars)
+                if (terminal.Options.WindowOptions.GetWinSizeChars)
                 {
                     // Response: CSI 8 ; rows ; cols t
-                    _terminal.RaiseDataReceived($"\u001b[8;{_terminal.Rows};{_terminal.Cols}t");
+                    terminal.RaiseDataReceived($"\e[8;{terminal.Rows};{terminal.Cols}t");
                 }
+
                 break;
 
             case 19: // Report screen size in characters
-                if (_terminal.Options.WindowOptions.GetScreenSizePixels)
+                if (terminal.Options.WindowOptions.GetScreenSizePixels)
                 {
                     // This is typically the same as window size for terminal apps
-                    _terminal.RaiseDataReceived($"\u001b[9;{_terminal.Rows};{_terminal.Cols}t");
+                    terminal.RaiseDataReceived($"\e[9;{terminal.Rows};{terminal.Cols}t");
                 }
+
                 break;
 
             case 20: // Report icon label
-                if (_terminal.Options.WindowOptions.GetIconTitle)
+                if (terminal.Options.WindowOptions.GetIconTitle)
                 {
-                    var args = _terminal.RaiseWindowInfoRequested(WindowInfoRequest.IconTitle);
-                    if (args.Handled && args.Title != null)
+                    TerminalEvents.WindowInfoRequestedEventArgs args =
+                        terminal.RaiseWindowInfoRequested(WindowInfoRequest.IconTitle);
+                    if (args is { Handled: true, Title: not null })
                     {
                         // Response: OSC L label ST
-                        _terminal.RaiseDataReceived($"\u001b]L{args.Title}\u0007");
+                        terminal.RaiseDataReceived($"\e]L{args.Title}\a");
                     }
                 }
+
                 break;
 
             case 21: // Report window title
-                if (_terminal.Options.WindowOptions.GetWinTitle)
+                if (terminal.Options.WindowOptions.GetWinTitle)
                 {
                     // Response: OSC l title ST - use the terminal's current title
-                    var title = _terminal.Title ?? string.Empty;
-                    _terminal.RaiseDataReceived($"\u001b]l{title}\u0007");
+                    string title = terminal.Title;
+                    terminal.RaiseDataReceived($"\e]l{title}\a");
                 }
+
                 break;
 
             case 22: // Save window title
@@ -1516,16 +1566,16 @@ public class InputHandler
         }
     }
 
-    private void SetCSIModeParameters(Params parameters, bool isPrivate)
+    private void SetCsiModeParameters(Params parameters, bool isPrivate)
     {
         for (int i = 0; i < parameters.Length; i++)
         {
-            var mode = parameters.GetParam(i, 0);
-            SetCSIMode(mode, isPrivate: isPrivate);
+            int mode = parameters.GetParam(i);
+            SetCsiMode(mode, isPrivate);
         }
     }
 
-    private void SetCSIMode(int mode, bool isPrivate)
+    private void SetCsiMode(int mode, bool isPrivate)
     {
         if (isPrivate)
         {
@@ -1533,16 +1583,16 @@ public class InputHandler
             // Convert int to TerminalMode enum
             if (!Enum.IsDefined(typeof(TerminalMode), mode))
             {
-                System.Diagnostics.Debug.WriteLine($"Unknown CSI private terminal mode: {mode}");
+                Debug.WriteLine($"Unknown CSI private terminal mode: {mode}");
                 return;
             }
 
-            var terminalMode = (TerminalMode)mode;
+            TerminalMode terminalMode = (TerminalMode)mode;
 
             switch (terminalMode)
             {
                 case TerminalMode.AppCursorKeys:
-                    _terminal.ApplicationCursorKeys = true;
+                    terminal.ApplicationCursorKeys = true;
                     break;
 
                 case TerminalMode.InsertMode:
@@ -1552,18 +1602,18 @@ public class InputHandler
                     break;
 
                 case TerminalMode.ReverseVideo:
-                    _terminal.ReverseVideo = true;
+                    terminal.ReverseVideo = true;
                     break;
 
                 case TerminalMode.Origin:
-                    _terminal.OriginMode = true;
+                    terminal.OriginMode = true;
                     MoveCursorToHome();
                     break;
 
                 case TerminalMode.Wraparound:
                     // Mode 7: Wraparound mode
                     // Wraparound and AutoWrapMode share value 7 in the enum
-                    _terminal.Options.Wraparound = true;
+                    terminal.Options.Wraparound = true;
                     break;
 
                 case TerminalMode.AutoRepeat:
@@ -1572,7 +1622,7 @@ public class InputHandler
                     break;
 
                 case TerminalMode.ShowCursor:
-                    _terminal.CursorVisible = true;
+                    terminal.CursorVisible = true;
                     break;
 
                 case TerminalMode.NationalCharset:
@@ -1581,68 +1631,68 @@ public class InputHandler
                     break;
 
                 case TerminalMode.ReverseWraparound:
-                    _terminal.ReverseWraparound = true;
+                    terminal.ReverseWraparound = true;
                     break;
 
                 case TerminalMode.AppKeypad:
-                    _terminal.ApplicationKeypad = true;
+                    terminal.ApplicationKeypad = true;
                     break;
 
                 case TerminalMode.BracketedPasteMode:
-                    _terminal.BracketedPasteMode = true;
+                    terminal.BracketedPasteMode = true;
                     break;
 
                 case TerminalMode.AltBuffer:
-                    _terminal.SwitchToAltBuffer();
+                    terminal.SwitchToAltBuffer();
                     break;
 
                 case TerminalMode.AltBufferCursor:
                     SaveCursor();
-                    _terminal.SwitchToAltBuffer();
+                    terminal.SwitchToAltBuffer();
                     break;
 
                 case TerminalMode.AltBufferFull:
                     SaveCursor();
-                    _terminal.SwitchToAltBuffer();
+                    terminal.SwitchToAltBuffer();
                     _buffer.SetCursor(0, 0);
                     EraseInDisplay(new Params()); // Clear screen
                     break;
 
                 case TerminalMode.SendFocusEvents:
-                    _terminal.SendFocusEvents = true;
-                    _terminal.GetMouseTracker().FocusEvents = true;
+                    terminal.SendFocusEvents = true;
+                    terminal.GetMouseTracker().FocusEvents = true;
                     break;
 
                 case TerminalMode.MouseReportClick:
-                    _terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.X10;
+                    terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.X10;
                     break;
 
                 case TerminalMode.MouseReportNormal:
-                    _terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.VT200;
+                    terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.Vt200;
                     break;
 
                 case TerminalMode.MouseReportButtonEvent:
-                    _terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.ButtonEvent;
+                    terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.ButtonEvent;
                     break;
 
                 case TerminalMode.MouseReportAnyEvent:
-                    _terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.AnyEvent;
+                    terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.AnyEvent;
                     break;
 
                 case TerminalMode.MouseReportUtf8:
-                    _terminal.GetMouseTracker().Encoding = MouseEncoding.Utf8;
+                    terminal.GetMouseTracker().Encoding = MouseEncoding.Utf8;
                     break;
 
                 case TerminalMode.MouseReportSgr:
-                    _terminal.GetMouseTracker().Encoding = MouseEncoding.SGR;
+                    terminal.GetMouseTracker().Encoding = MouseEncoding.Sgr;
                     break;
 
                 case TerminalMode.MouseReportUrxvt:
-                    _terminal.GetMouseTracker().Encoding = MouseEncoding.URXVT;
+                    terminal.GetMouseTracker().Encoding = MouseEncoding.Urxvt;
                     break;
 
                 case TerminalMode.EightBitInput:
-                    _terminal.EightBitInput = true;
+                    terminal.EightBitInput = true;
                     break;
 
                 case TerminalMode.NumLock:
@@ -1650,32 +1700,33 @@ public class InputHandler
                     break;
 
                 case TerminalMode.MetaSendsEscape:
-                    System.Diagnostics.Debug.WriteLine($">>> Mode {mode} MetaSendsEscape ENABLED (disabling Win32InputMode)");
-                    _terminal.MetaSendsEscape = true;
+                    Debug.WriteLine($">>> Mode {mode} MetaSendsEscape ENABLED (disabling Win32InputMode)");
+                    terminal.MetaSendsEscape = true;
                     // MetaSendsEscape is incompatible with Win32InputMode for Alt key handling
                     // When explicitly requesting ESC+char for meta keys, disable Win32 input
-                    _terminal.Win32InputMode = false;
+                    terminal.Win32InputMode = false;
                     break;
 
                 case TerminalMode.AltSendsEscape:
-                    System.Diagnostics.Debug.WriteLine($">>> Mode {mode} AltSendsEscape ENABLED (disabling Win32InputMode)");
-                    _terminal.AltSendsEscape = true;
+                    Debug.WriteLine($">>> Mode {mode} AltSendsEscape ENABLED (disabling Win32InputMode)");
+                    terminal.AltSendsEscape = true;
                     // AltSendsEscape is incompatible with Win32InputMode for Alt key handling
                     // When explicitly requesting ESC+char for Alt keys, disable Win32 input
-                    _terminal.Win32InputMode = false;
+                    terminal.Win32InputMode = false;
                     break;
 
                 case TerminalMode.Win32InputMode:
-                    System.Diagnostics.Debug.WriteLine($">>> Mode {mode} Win32InputMode ENABLED (disabling MetaSendsEscape and AltSendsEscape)");
-                    _terminal.Win32InputMode = true;
+                    Debug.WriteLine(
+                        $">>> Mode {mode} Win32InputMode ENABLED (disabling MetaSendsEscape and AltSendsEscape)");
+                    terminal.Win32InputMode = true;
                     // Win32InputMode is incompatible with MetaSendsEscape/AltSendsEscape
                     // When enabling Win32 input mode, disable ESC+char modes
-                    _terminal.MetaSendsEscape = false;
-                    _terminal.AltSendsEscape = false;
+                    terminal.MetaSendsEscape = false;
+                    terminal.AltSendsEscape = false;
                     break;
 
                 default:
-                    System.Diagnostics.Debug.WriteLine($"Unhandled CSI private terminal mode: {terminalMode}");
+                    Debug.WriteLine($"Unhandled CSI private terminal mode: {terminalMode}");
                     break;
             }
         }
@@ -1684,55 +1735,55 @@ public class InputHandler
             // ANSI Modes (SM)
             if (!Enum.IsDefined(typeof(TerminalMode), mode))
             {
-                System.Diagnostics.Debug.WriteLine($"Unknown CSI terminal mode: {mode}");
+                Debug.WriteLine($"Unknown CSI terminal mode: {mode}");
                 return;
             }
 
-            var terminalMode = (TerminalMode)mode;
+            TerminalMode terminalMode = (TerminalMode)mode;
 
             switch (terminalMode)
             {
                 case TerminalMode.InsertMode:
-                    _terminal.InsertMode = true;
+                    terminal.InsertMode = true;
                     break;
 
                 case TerminalMode.AutoWrapMode:
-                    _terminal.Options.Wraparound = true;
+                    terminal.Options.Wraparound = true;
                     break;
 
                 default:
-                    System.Diagnostics.Debug.WriteLine($"Unhandled CSI terminal mode: {terminalMode}");
+                    Debug.WriteLine($"Unhandled CSI terminal mode: {terminalMode}");
                     break;
             }
         }
     }
 
-    private void ResetCSIModeParameters(Params parameters, bool isPrivate)
+    private void ResetCsiModeParameters(Params parameters, bool isPrivate)
     {
         for (int i = 0; i < parameters.Length; i++)
         {
-            var mode = parameters.GetParam(i, 0);
-            ResetCSIMode(mode, isPrivate: isPrivate);
+            int mode = parameters.GetParam(i);
+            ResetCsiMode(mode, isPrivate);
         }
     }
 
-    private void ResetCSIMode(int mode, bool isPrivate)
+    private void ResetCsiMode(int mode, bool isPrivate)
     {
         if (isPrivate)
         {
             // DEC Private Modes (DECRST)
             if (!Enum.IsDefined(typeof(TerminalMode), mode))
             {
-                System.Diagnostics.Debug.WriteLine($"Unknown private reset terminal mode: {mode}");
+                Debug.WriteLine($"Unknown private reset terminal mode: {mode}");
                 return;
             }
 
-            var terminalMode = (TerminalMode)mode;
+            TerminalMode terminalMode = (TerminalMode)mode;
 
             switch (terminalMode)
             {
                 case TerminalMode.AppCursorKeys:
-                    _terminal.ApplicationCursorKeys = false;
+                    terminal.ApplicationCursorKeys = false;
                     break;
 
                 case TerminalMode.InsertMode:
@@ -1741,17 +1792,17 @@ public class InputHandler
                     break;
 
                 case TerminalMode.ReverseVideo:
-                    _terminal.ReverseVideo = false;
+                    terminal.ReverseVideo = false;
                     break;
 
                 case TerminalMode.Origin:
-                    _terminal.OriginMode = false;
+                    terminal.OriginMode = false;
                     MoveCursorToHome();
                     break;
 
                 case TerminalMode.Wraparound:
                     // Mode 7: Wraparound mode
-                    _terminal.Options.Wraparound = false;
+                    terminal.Options.Wraparound = false;
                     break;
 
                 case TerminalMode.AutoRepeat:
@@ -1760,7 +1811,7 @@ public class InputHandler
                     break;
 
                 case TerminalMode.ShowCursor:
-                    _terminal.CursorVisible = false;
+                    terminal.CursorVisible = false;
                     break;
 
                 case TerminalMode.NationalCharset:
@@ -1769,51 +1820,51 @@ public class InputHandler
                     break;
 
                 case TerminalMode.ReverseWraparound:
-                    _terminal.ReverseWraparound = false;
+                    terminal.ReverseWraparound = false;
                     break;
 
                 case TerminalMode.AppKeypad:
-                    _terminal.ApplicationKeypad = false;
+                    terminal.ApplicationKeypad = false;
                     break;
 
                 case TerminalMode.BracketedPasteMode:
-                    _terminal.BracketedPasteMode = false;
+                    terminal.BracketedPasteMode = false;
                     break;
 
                 case TerminalMode.AltBuffer:
-                    _terminal.SwitchToNormalBuffer();
+                    terminal.SwitchToNormalBuffer();
                     break;
 
                 case TerminalMode.AltBufferCursor:
-                    _terminal.SwitchToNormalBuffer();
+                    terminal.SwitchToNormalBuffer();
                     RestoreCursor();
                     break;
 
                 case TerminalMode.AltBufferFull:
-                    _terminal.SwitchToNormalBuffer();
+                    terminal.SwitchToNormalBuffer();
                     RestoreCursor();
                     break;
 
                 case TerminalMode.SendFocusEvents:
-                    _terminal.SendFocusEvents = false;
-                    _terminal.GetMouseTracker().FocusEvents = false;
+                    terminal.SendFocusEvents = false;
+                    terminal.GetMouseTracker().FocusEvents = false;
                     break;
 
                 case TerminalMode.MouseReportClick:
                 case TerminalMode.MouseReportNormal:
                 case TerminalMode.MouseReportButtonEvent:
                 case TerminalMode.MouseReportAnyEvent:
-                    _terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.None;
+                    terminal.GetMouseTracker().TrackingMode = MouseTrackingMode.None;
                     break;
 
                 case TerminalMode.MouseReportUtf8:
                 case TerminalMode.MouseReportSgr:
                 case TerminalMode.MouseReportUrxvt:
-                    _terminal.GetMouseTracker().Encoding = MouseEncoding.Default;
+                    terminal.GetMouseTracker().Encoding = MouseEncoding.Default;
                     break;
 
                 case TerminalMode.EightBitInput:
-                    _terminal.EightBitInput = false;
+                    terminal.EightBitInput = false;
                     break;
 
                 case TerminalMode.NumLock:
@@ -1821,22 +1872,22 @@ public class InputHandler
                     break;
 
                 case TerminalMode.MetaSendsEscape:
-                    System.Diagnostics.Debug.WriteLine($">>> Mode {mode} MetaSendsEscape DISABLED");
-                    _terminal.MetaSendsEscape = false;
+                    Debug.WriteLine($">>> Mode {mode} MetaSendsEscape DISABLED");
+                    terminal.MetaSendsEscape = false;
                     break;
 
                 case TerminalMode.AltSendsEscape:
-                    System.Diagnostics.Debug.WriteLine($">>> Mode {mode} AltSendsEscape DISABLED");
-                    _terminal.AltSendsEscape = false;
+                    Debug.WriteLine($">>> Mode {mode} AltSendsEscape DISABLED");
+                    terminal.AltSendsEscape = false;
                     break;
 
                 case TerminalMode.Win32InputMode:
-                    System.Diagnostics.Debug.WriteLine($">>> Mode {mode} Win32InputMode DISABLED");
-                    _terminal.Win32InputMode = false;
+                    Debug.WriteLine($">>> Mode {mode} Win32InputMode DISABLED");
+                    terminal.Win32InputMode = false;
                     break;
 
                 default:
-                    System.Diagnostics.Debug.WriteLine($"Unhandled terminal mode: {terminalMode}");
+                    Debug.WriteLine($"Unhandled terminal mode: {terminalMode}");
                     break;
             }
         }
@@ -1845,24 +1896,24 @@ public class InputHandler
             // ANSI Modes (RM)
             if (!Enum.IsDefined(typeof(TerminalMode), mode))
             {
-                System.Diagnostics.Debug.WriteLine($"Unknown CSI reset terminal mode: {mode}");
+                Debug.WriteLine($"Unknown CSI reset terminal mode: {mode}");
                 return;
             }
 
-            var terminalMode = (TerminalMode)mode;
+            TerminalMode terminalMode = (TerminalMode)mode;
 
             switch (terminalMode)
             {
                 case TerminalMode.InsertMode:
-                    _terminal.InsertMode = false;
+                    terminal.InsertMode = false;
                     break;
 
                 case TerminalMode.AutoWrapMode:
-                    _terminal.Options.Wraparound = false;
+                    terminal.Options.Wraparound = false;
                     break;
 
                 default:
-                    System.Diagnostics.Debug.WriteLine($"Unhandled CSI reset terminal mode: {terminalMode}");
+                    Debug.WriteLine($"Unhandled CSI reset terminal mode: {terminalMode}");
                     break;
             }
         }
@@ -1902,13 +1953,13 @@ public class InputHandler
 
     private void ResetTerminal()
     {
-        _terminal.Reset();
+        terminal.Reset();
     }
 
     private void SelectCursorStyle(Params parameters)
     {
         // DECSCUSR - Select Cursor Style (CSI Ps SP q)
-        var ps = parameters.GetParam(0, 1);
+        int ps = parameters.GetParam(0, 1);
 
         CursorStyle style;
         bool blink;
@@ -1945,7 +1996,7 @@ public class InputHandler
                 return;
         }
 
-        _terminal.SetCursorStyle(style, blink);
+        terminal.SetCursorStyle(style, blink);
     }
 
     private void SaveCursor()
@@ -1978,10 +2029,14 @@ public class InputHandler
                 if (rune.Value == Emoji.ZeroWidthJoiner || rune.Value == Emoji.ObjectReplacementCharacter)
                 {
                     if (supportsComplexEmoji)
+                    {
                         width -= lastWidth;
+                    }
                     else
                         // we return the first emoji as the result because terminal doesn't support chaining them
+                    {
                         break;
+                    }
                 }
                 else if (rune.Value == Codepoints.VariationSelectors.EmojiSymbol &&
                          lastWidth == 1)
@@ -1998,7 +2053,7 @@ public class InputHandler
                     lastWidth = 1;
                 }
                 else if (lastWidth > 0 &&
-                         (rune.Value >= Emoji.SkinTones.Light && rune.Value <= Emoji.SkinTones.Dark ||
+                         ((rune.Value >= Emoji.SkinTones.Light && rune.Value <= Emoji.SkinTones.Dark) ||
                           rune.Value == Codepoints.Keycap))
                 {
                     // Emoji modifier (skin tone) or keycap extender should continue current glyph
@@ -2006,12 +2061,14 @@ public class InputHandler
                     // else: combining � ignore
                 }
                 // regional indicator symbols
-                else if (rune.Value >= 0x1F1E6 && rune.Value <= 0x1F1FF)
+                else if (rune.Value is >= 0x1F1E6 and <= 0x1F1FF)
                 {
                     regionalRuneCount++;
                     if (regionalRuneCount % 2 == 0)
                         // every pair of regional indicator symbols form a single glyph
+                    {
                         width += (ushort)runeWidth;
+                    }
                     // If the last rune is a regional indicator symbol, continue the current glyph
                 }
                 else
@@ -2020,7 +2077,10 @@ public class InputHandler
                 }
 
 
-                if (runeWidth > 0) lastWidth = (ushort)runeWidth;
+                if (runeWidth > 0)
+                {
+                    lastWidth = (ushort)runeWidth;
+                }
             }
             // Control chars return as width < 0
             else
@@ -2042,7 +2102,7 @@ public class InputHandler
         return width;
     }
 
-    public void SetBuffer(Buffer.TerminalBuffer buffer)
+    public void SetBuffer(TerminalBuffer buffer)
     {
         _buffer = buffer;
     }

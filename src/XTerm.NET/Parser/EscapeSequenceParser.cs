@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using XTerm.Common;
 using XTerm.Events.Parser;
@@ -6,80 +5,71 @@ using XTerm.Events.Parser;
 namespace XTerm.Parser;
 
 /// <summary>
-/// VT100/ANSI escape sequence parser implementing a state machine.
-/// Based on Paul Williams' ANSI parser state machine.
+///     VT100/ANSI escape sequence parser implementing a state machine.
+///     Based on Paul Williams' ANSI parser state machine.
 /// </summary>
-public class EscapeSequenceParser
+public sealed class EscapeSequenceParser
 {
-    private ParserState _state;
-    private readonly Params _params;
-    private readonly StringBuilder _collect;
-    private readonly StringBuilder _osc;
-    private readonly StringBuilder _dcs;
-    
+    private readonly StringBuilder _collect = new();
+    private readonly StringBuilder _dcs = new();
+    private readonly StringBuilder _osc = new();
+    private readonly Params _params = new();
+    private ParserState _state = ParserState.Ground;
+
     // Parser events - Standard C# event pattern
     /// <summary>
-    /// Fired when printable characters are parsed.
+    ///     Fired when printable characters are parsed.
     /// </summary>
     public event EventHandler<PrintEventArgs>? Print;
 
     /// <summary>
-    /// Fired when control characters are executed.
+    ///     Fired when control characters are executed.
     /// </summary>
     public event EventHandler<ExecuteEventArgs>? Execute;
 
     /// <summary>
-    /// Fired when CSI sequences are parsed.
+    ///     Fired when CSI sequences are parsed.
     /// </summary>
     public event EventHandler<CsiEventArgs>? Csi;
 
     /// <summary>
-    /// Fired when ESC sequences are parsed.
+    ///     Fired when ESC sequences are parsed.
     /// </summary>
     public event EventHandler<EscEventArgs>? Esc;
 
     /// <summary>
-    /// Fired when OSC sequences are parsed.
+    ///     Fired when OSC sequences are parsed.
     /// </summary>
     public event EventHandler<OscEventArgs>? Osc;
 
     /// <summary>
-    /// DCS parsing is not implemented yet. This event is retained for source compatibility.
+    ///     DCS parsing is not implemented yet. This event is retained for source compatibility.
     /// </summary>
 #pragma warning disable CS0067
     [Obsolete("DCS parsing is not implemented yet; this event is retained for source compatibility.")]
     public event EventHandler<DcsEventArgs>? Dcs;
 #pragma warning restore CS0067
 
-    public EscapeSequenceParser()
-    {
-        _state = ParserState.Ground;
-        _params = new Params();
-        _collect = new StringBuilder();
-        _osc = new StringBuilder();
-        _dcs = new StringBuilder();
-    }
-
     /// <summary>
-    /// Parses input data byte by byte.
+    ///     Parses input data byte by byte.
     /// </summary>
     public void Parse(string data)
     {
-        foreach (var rune in data.EnumerateRunes())
+        foreach (Rune rune in data.EnumerateRunes())
         {
             ParseChar(rune.Value);
         }
     }
 
     /// <summary>
-    /// Parses a single character/code point.
+    ///     Parses a single character/code point.
     /// </summary>
     private void ParseChar(int code)
     {
-        var currentState = _state;
+        ParserState currentState = _state;
 
         // C0/C1 control characters
-        if (code < 0x20 || (code >= 0x80 && code < 0xA0))
+        if (code is < 0x20 or >= 0x80 and < 0xA0)
         {
             switch (currentState)
             {
@@ -94,18 +84,22 @@ public class EscapeSequenceParser
                     {
                         Transition(ParserState.Escape);
                     }
+
                     return;
 
                 case ParserState.OscString:
-                    if (code == 0x1B || code == 0x07) // ESC or BEL
+                    switch (code)
                     {
-                        DispatchOsc();
-                        Transition(code == 0x1B ? ParserState.Escape : ParserState.Ground);
+                        // ESC or BEL
+                        case 0x1B or 0x07:
+                            DispatchOsc();
+                            Transition(code == 0x1B ? ParserState.Escape : ParserState.Ground);
+                            break;
+                        case >= 0x20:
+                            OscPut(code);
+                            break;
                     }
-                    else if (code >= 0x20)
-                    {
-                        OscPut(code);
-                    }
+
                     return;
             }
         }
@@ -118,6 +112,7 @@ public class EscapeSequenceParser
                 {
                     OnPrint(code);
                 }
+
                 break;
 
             case ParserState.Escape:
@@ -149,81 +144,85 @@ public class EscapeSequenceParser
                         Transition(ParserState.Ground);
                         break;
                 }
+
                 break;
 
             case ParserState.EscapeIntermediate:
-                if (code >= 0x20 && code < 0x30)
+                switch (code)
                 {
-                    Collect(code);
+                    case >= 0x20 and < 0x30:
+                        Collect(code);
+                        break;
+                    case >= 0x30 and < 0x7F:
+                        DispatchEsc(code);
+                        Transition(ParserState.Ground);
+                        break;
                 }
-                else if (code >= 0x30 && code < 0x7F)
-                {
-                    DispatchEsc(code);
-                    Transition(ParserState.Ground);
-                }
+
                 break;
 
             case ParserState.CsiEntry:
-                if (code >= 0x3C && code <= 0x3F) // Private parameter markers (<, =, >, ?)
+                switch (code)
                 {
-                    Collect(code);
+                    // Private parameter markers (<, =, >, ?)
+                    case >= 0x3C and <= 0x3F:
+                        Collect(code);
+                        break;
+                    // 0-9, :, ;
+                    case >= 0x30 and < 0x3C:
+                        Param(code);
+                        Transition(ParserState.CsiParam);
+                        break;
+                    case >= 0x40 and < 0x7F:
+                        DispatchCsi(code);
+                        Transition(ParserState.Ground);
+                        break;
+                    case >= 0x20 and < 0x30:
+                        Collect(code);
+                        Transition(ParserState.CsiIntermediate);
+                        break;
                 }
-                else if (code >= 0x30 && code < 0x3C) // 0-9, :, ;
-                {
-                    Param(code);
-                    Transition(ParserState.CsiParam);
-                }
-                else if (code >= 0x40 && code < 0x7F)
-                {
-                    DispatchCsi(code);
-                    Transition(ParserState.Ground);
-                }
-                else if (code >= 0x20 && code < 0x30)
-                {
-                    Collect(code);
-                    Transition(ParserState.CsiIntermediate);
-                }
+
                 break;
 
             case ParserState.CsiParam:
-                if (code >= 0x30 && code < 0x40)
+                switch (code)
                 {
-                    Param(code);
+                    case >= 0x30 and < 0x40:
+                        Param(code);
+                        break;
+                    case >= 0x40 and < 0x7F:
+                        DispatchCsi(code);
+                        Transition(ParserState.Ground);
+                        break;
+                    case >= 0x20 and < 0x30:
+                        Collect(code);
+                        Transition(ParserState.CsiIntermediate);
+                        break;
                 }
-                else if (code >= 0x40 && code < 0x7F)
-                {
-                    DispatchCsi(code);
-                    Transition(ParserState.Ground);
-                }
-                else if (code >= 0x20 && code < 0x30)
-                {
-                    Collect(code);
-                    Transition(ParserState.CsiIntermediate);
-                }
-                else if (code == 0x3A) // :
-                {
-                    // Sub-parameter separator
-                    Transition(ParserState.CsiIgnore);
-                }
+
                 break;
 
             case ParserState.CsiIntermediate:
-                if (code >= 0x20 && code < 0x30)
+                switch (code)
                 {
-                    Collect(code);
+                    case >= 0x20 and < 0x30:
+                        Collect(code);
+                        break;
+                    case >= 0x40 and < 0x7F:
+                        DispatchCsi(code);
+                        Transition(ParserState.Ground);
+                        break;
                 }
-                else if (code >= 0x40 && code < 0x7F)
-                {
-                    DispatchCsi(code);
-                    Transition(ParserState.Ground);
-                }
+
                 break;
 
             case ParserState.CsiIgnore:
-                if (code >= 0x40 && code < 0x7F)
+                if (code is >= 0x40 and < 0x7F)
                 {
                     Transition(ParserState.Ground);
                 }
+
                 break;
 
             case ParserState.OscString:
@@ -235,10 +234,11 @@ public class EscapeSequenceParser
             case ParserState.DcsIgnore:
             case ParserState.DcsPassthrough:
                 // DCS handling (simplified)
-                if (code == 0x9C || code == 0x1B) // ST or ESC
+                if (code is 0x9C or 0x1B) // ST or ESC
                 {
                     Transition(ParserState.Ground);
                 }
+
                 break;
         }
     }
@@ -252,11 +252,13 @@ public class EscapeSequenceParser
             case ParserState.CsiParam:
             case ParserState.CsiIntermediate:
             case ParserState.CsiIgnore:
-                if (newState != ParserState.CsiParam && newState != ParserState.CsiIntermediate && newState != ParserState.CsiIgnore)
+                if (newState != ParserState.CsiParam && newState != ParserState.CsiIntermediate &&
+                    newState != ParserState.CsiIgnore)
                 {
                     _params.Reset();
                     _collect.Clear();
                 }
+
                 break;
         }
 
@@ -279,17 +281,17 @@ public class EscapeSequenceParser
     }
 
     /// <summary>
-    /// Raises the Print event.
+    ///     Raises the Print event.
     /// </summary>
-    protected virtual void OnPrint(int code)
+    private void OnPrint(int code)
     {
         Print?.Invoke(this, new PrintEventArgs(char.ConvertFromUtf32(code)));
     }
 
     /// <summary>
-    /// Raises the Execute event.
+    ///     Raises the Execute event.
     /// </summary>
-    protected virtual void OnExecute(int code)
+    private void OnExecute(int code)
     {
         Execute?.Invoke(this, new ExecuteEventArgs(code));
     }
@@ -301,49 +303,54 @@ public class EscapeSequenceParser
 
     private void Param(int code)
     {
-        if (code == 0x3B) // ;
+        switch (code)
         {
-            _params.AddParam(0);
-        }
-        else if (code >= 0x30 && code <= 0x39) // 0-9
-        {
-            var digit = code - 0x30;
-            
-            // Get current value of last parameter and update it
-            var currentValue = _params.GetParam(_params.Length - 1, 0);
-            var newValue = currentValue * 10 + digit;
-            _params.UpdateLastParam(newValue);
+            // ;
+            case 0x3B:
+                _params.AddParam(0);
+                break;
+            // 0-9
+            case >= 0x30 and <= 0x39:
+            {
+                int digit = code - 0x30;
+
+                // Get current value of last parameter and update it
+                int currentValue = _params.GetParam(_params.Length - 1);
+                int newValue = (currentValue * 10) + digit;
+                _params.UpdateLastParam(newValue);
+                break;
+            }
         }
     }
 
     private void DispatchCsi(int code)
     {
-        var finalChar = ((char)code).ToString();
+        string finalChar = ((char)code).ToString();
         // Clone params so handlers get their own copy
-        var paramsClone = _params.Clone();
+        Params paramsClone = _params.Clone();
         // Collected characters come BEFORE the final character (e.g., "?" before "h" gives "?h")
-        var identifier = _collect.ToString() + finalChar;
+        string identifier = _collect + finalChar;
         OnCsi(identifier, paramsClone);
     }
 
     /// <summary>
-    /// Raises the Csi event.
+    ///     Raises the Csi event.
     /// </summary>
-    protected virtual void OnCsi(string identifier, Params parameters)
+    private void OnCsi(string identifier, Params parameters)
     {
         Csi?.Invoke(this, new CsiEventArgs(identifier, parameters));
     }
 
     private void DispatchEsc(int code)
     {
-        var finalChar = ((char)code).ToString();
+        string finalChar = ((char)code).ToString();
         OnEsc(finalChar, _collect.ToString());
     }
 
     /// <summary>
-    /// Raises the Esc event.
+    ///     Raises the Esc event.
     /// </summary>
-    protected virtual void OnEsc(string finalChar, string collected)
+    private void OnEsc(string finalChar, string collected)
     {
         Esc?.Invoke(this, new EscEventArgs(finalChar, collected));
     }
@@ -359,15 +366,15 @@ public class EscapeSequenceParser
     }
 
     /// <summary>
-    /// Raises the Osc event.
+    ///     Raises the Osc event.
     /// </summary>
-    protected virtual void OnOsc(string data)
+    private void OnOsc(string data)
     {
         Osc?.Invoke(this, new OscEventArgs(data));
     }
 
     /// <summary>
-    /// Resets the parser to initial state.
+    ///     Resets the parser to initial state.
     /// </summary>
     public void Reset()
     {

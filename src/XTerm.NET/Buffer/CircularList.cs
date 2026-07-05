@@ -1,104 +1,107 @@
 namespace XTerm.Buffer;
 
 /// <summary>
-/// Circular list implementation for terminal buffer lines.
-/// Provides efficient wraparound behavior for scrollback buffer.
+///     Circular list implementation for terminal buffer lines.
+///     Provides efficient wraparound behavior for scrollback buffer.
 /// </summary>
-public class CircularList<T> where T : class
+public class CircularList<T>(int maxLength)
+    where T : class
 {
-    private T?[] _array;
-    private int _startIndex;
-    private int _length;
+    private T?[] _array = new T?[maxLength];
+    private int _startIndex = 0;
 
-    public int MaxLength { get; private set; }
+    public int MaxLength { get; private set; } = maxLength;
 
-    public int Length => _length;
-
-    public CircularList(int maxLength)
-    {
-        MaxLength = maxLength;
-        _array = new T?[maxLength];
-        _startIndex = 0;
-        _length = 0;
-    }
+    public int Length { get; private set; } = 0;
 
     public T? this[int index]
     {
         get
         {
-            if (index < 0 || index >= _length)
+            if (index < 0 || index >= Length)
+            {
                 throw new IndexOutOfRangeException();
+            }
+
             return _array[GetCyclicIndex(index)];
         }
         set
         {
-            if (index < 0 || index >= _length)
+            if (index < 0 || index >= Length)
+            {
                 throw new IndexOutOfRangeException();
+            }
+
             _array[GetCyclicIndex(index)] = value;
         }
     }
 
     /// <summary>
-    /// Pushes a new item to the end of the list.
+    ///     Pushes a new item to the end of the list.
     /// </summary>
     public void Push(T item)
     {
-        if (_length == MaxLength)
+        if (Length == MaxLength)
         {
             // Overwrite oldest item
-            _array[GetCyclicIndex(_length)] = item;
+            _array[GetCyclicIndex(Length)] = item;
             _startIndex = (_startIndex + 1) % MaxLength;
         }
         else
         {
-            _array[GetCyclicIndex(_length)] = item;
-            _length++;
+            _array[GetCyclicIndex(Length)] = item;
+            Length++;
         }
     }
 
     /// <summary>
-    /// Removes and returns the last item.
+    ///     Removes and returns the last item.
     /// </summary>
     public T? Pop()
     {
-        if (_length == 0)
+        if (Length == 0)
+        {
             return null;
+        }
 
-        var index = GetCyclicIndex(_length - 1);
-        var item = _array[index];
+        int index = GetCyclicIndex(Length - 1);
+        T? item = _array[index];
         _array[index] = null;
-        _length--;
+        Length--;
         return item;
     }
 
     /// <summary>
-    /// Inserts items at a specific index.
+    ///     Inserts items at a specific index.
     /// </summary>
     public void Splice(int start, int deleteCount, params T[] items)
     {
-        if (start < 0 || start > _length)
+        if (start < 0 || start > Length)
+        {
             throw new IndexOutOfRangeException();
+        }
 
         // Remove items
         if (deleteCount > 0)
         {
-            for (int i = start; i < _length - deleteCount; i++)
+            for (int i = start; i < Length - deleteCount; i++)
             {
                 this[i] = this[i + deleteCount];
             }
-            _length -= deleteCount;
+
+            Length -= deleteCount;
         }
 
         // Insert items
-        foreach (var item in items)
+        foreach (T item in items)
         {
-            if (_length < MaxLength)
+            if (Length < MaxLength)
             {
                 // First increase length
-                _length++;
+                Length++;
 
                 // Then shift items right from the end
-                for (int i = _length - 1; i > start; i--)
+                for (int i = Length - 1; i > start; i--)
                 {
                     this[i] = this[i - 1];
                 }
@@ -116,61 +119,68 @@ public class CircularList<T> where T : class
     }
 
     /// <summary>
-    /// Trims the list to a specific length.
+    ///     Trims the list to a specific length.
     /// </summary>
     public void TrimStart(int count)
     {
         if (count <= 0)
+        {
             return;
+        }
 
-        count = Math.Min(count, _length);
+        count = Math.Min(count, Length);
         _startIndex = (_startIndex + count) % MaxLength;
-        _length -= count;
+        Length -= count;
     }
 
     /// <summary>
-    /// Shifts the start index by a specified amount.
+    ///     Shifts the start index by a specified amount.
     /// </summary>
     public void ShiftElements(int start, int count, int direction)
     {
-        if (direction > 0)
+        switch (direction)
         {
-            // Shift right
-            for (int i = count - 1; i >= 0; i--)
+            case > 0:
             {
-                if (start + i + direction < _length)
+                // Shift right
+                for (int i = count - 1; i >= 0; i--)
                 {
-                    this[start + i + direction] = this[start + i];
+                    if (start + i + direction < Length)
+                    {
+                        this[start + i + direction] = this[start + i];
+                    }
                 }
+
+                break;
             }
-        }
-        else if (direction < 0)
-        {
-            // Shift left
-            for (int i = 0; i < count; i++)
+            case < 0:
             {
-                if (start + i + direction >= 0)
+                // Shift left
+                for (int i = 0; i < count; i++)
                 {
-                    this[start + i + direction] = this[start + i];
+                    if (start + i + direction >= 0)
+                    {
+                        this[start + i + direction] = this[start + i];
+                    }
                 }
+
+                break;
             }
         }
     }
 
     /// <summary>
-    /// Recycles a line from the buffer, or creates a new one.
+    ///     Recycles a line from the buffer, or creates a new one.
     /// </summary>
     public T? Recycle()
     {
-        if (_length >= MaxLength)
-        {
-            return Pop();
-        }
-        return null;
+        return Length >= MaxLength 
+            ? Pop() 
+            : null;
     }
 
     /// <summary>
-    /// Gets the actual array index for a logical index.
+    ///     Gets the actual array index for a logical index.
     /// </summary>
     private int GetCyclicIndex(int index)
     {
@@ -178,25 +188,27 @@ public class CircularList<T> where T : class
     }
 
     /// <summary>
-    /// Clears the list.
+    ///     Clears the list.
     /// </summary>
     public void Clear()
     {
         Array.Clear(_array, 0, _array.Length);
         _startIndex = 0;
-        _length = 0;
+        Length = 0;
     }
 
     /// <summary>
-    /// Resizes the maximum length of the circular list.
+    ///     Resizes the maximum length of the circular list.
     /// </summary>
     public void Resize(int newMaxLength)
     {
         if (newMaxLength == MaxLength)
+        {
             return;
+        }
 
-        var newArray = new T?[newMaxLength];
-        var copyLength = Math.Min(_length, newMaxLength);
+        T?[] newArray = new T?[newMaxLength];
+        int copyLength = Math.Min(Length, newMaxLength);
 
         for (int i = 0; i < copyLength; i++)
         {
@@ -206,19 +218,21 @@ public class CircularList<T> where T : class
         _array = newArray;
         MaxLength = newMaxLength;
         _startIndex = 0;
-        _length = copyLength;
+        Length = copyLength;
     }
 
     /// <summary>
-    /// Gets an enumerable of all items.
+    ///     Gets an enumerable of all items.
     /// </summary>
     public IEnumerable<T> GetItems()
     {
-        for (int i = 0; i < _length; i++)
+        for (int i = 0; i < Length; i++)
         {
-            var item = this[i];
+            T? item = this[i];
             if (item != null)
+            {
                 yield return item;
+            }
         }
     }
 }

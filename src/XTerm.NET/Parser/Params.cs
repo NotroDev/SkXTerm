@@ -1,7 +1,7 @@
 namespace XTerm.Parser;
 
 /// <summary>
-/// Manages parameters for escape sequences.
+///     Manages parameters for escape sequences.
 /// </summary>
 public class Params : ICloneable
 {
@@ -9,10 +9,8 @@ public class Params : ICloneable
     private readonly List<int> _subParams;
     private int _subParamsStart;
 
-    public int Length => _params.Count;
-
     /// <summary>
-    /// Default constructor.
+    ///     Default constructor.
     /// </summary>
     public Params()
     {
@@ -22,7 +20,7 @@ public class Params : ICloneable
     }
 
     /// <summary>
-    /// Copy constructor for cloning.
+    ///     Copy constructor for cloning.
     /// </summary>
     public Params(Params other)
     {
@@ -31,21 +29,32 @@ public class Params : ICloneable
         _subParamsStart = other._subParamsStart;
     }
 
+    public int Length => _params.Count;
+
     /// <summary>
-    /// Gets a parameter at a specific index, or returns default value.
+    ///     Explicit interface implementation for ICloneable.
     /// </summary>
-    public int GetParam(int index, int defaultValue = 0)
+    object ICloneable.Clone()
     {
-        if (index >= 0 && index < _params.Count)
-        {
-            var value = _params[index];
-            return value == -1 ? defaultValue : value;
-        }
-        return defaultValue;
+        return Clone();
     }
 
     /// <summary>
-    /// Adds a parameter.
+    ///     Gets a parameter at a specific index, or returns default value.
+    /// </summary>
+    public int GetParam(int index, int defaultValue = 0)
+    {
+        if (index < 0 || index >= _params.Count)
+        {
+            return defaultValue;
+        }
+
+        int value = _params[index];
+        return value == -1 ? defaultValue : value;
+    }
+
+    /// <summary>
+    ///     Adds a parameter.
     /// </summary>
     public void AddParam(int value)
     {
@@ -53,13 +62,13 @@ public class Params : ICloneable
     }
 
     /// <summary>
-    /// Updates the last parameter value.
+    ///     Updates the last parameter value.
     /// </summary>
     public void UpdateLastParam(int value)
     {
         if (_params.Count > 0)
         {
-            _params[_params.Count - 1] = value;
+            _params[^1] = value;
         }
         else
         {
@@ -68,7 +77,7 @@ public class Params : ICloneable
     }
 
     /// <summary>
-    /// Adds a sub-parameter.
+    ///     Adds a sub-parameter.
     /// </summary>
     public void AddSubParam(int value)
     {
@@ -76,22 +85,23 @@ public class Params : ICloneable
     }
 
     /// <summary>
-    /// Gets sub-parameters for a specific parameter index.
+    ///     Gets sub-parameters for a specific parameter index.
     /// </summary>
     public List<int> GetSubParams(int index)
     {
-        var result = new List<int>();
+        List<int> result = [];
         if (index >= 0 && index < _params.Count)
         {
             // Sub-parameters are stored contiguously
             // This is a simplified version
             return result;
         }
+
         return result;
     }
 
     /// <summary>
-    /// Resets the parameters.
+    ///     Resets the parameters.
     /// </summary>
     public void Reset()
     {
@@ -101,7 +111,7 @@ public class Params : ICloneable
     }
 
     /// <summary>
-    /// Checks if a parameter exists at an index.
+    ///     Checks if a parameter exists at an index.
     /// </summary>
     public bool HasParam(int index)
     {
@@ -109,7 +119,7 @@ public class Params : ICloneable
     }
 
     /// <summary>
-    /// Gets all parameters as an array.
+    ///     Gets all parameters as an array.
     /// </summary>
     public int[] ToArray()
     {
@@ -117,18 +127,10 @@ public class Params : ICloneable
     }
 
     /// <summary>
-    /// Creates a copy of this Params.
+    ///     Creates a copy of this Params.
     /// </summary>
     public Params Clone()
     {
         return new Params(this);
-    }
-
-    /// <summary>
-    /// Explicit interface implementation for ICloneable.
-    /// </summary>
-    object ICloneable.Clone()
-    {
-        return Clone();
     }
 }

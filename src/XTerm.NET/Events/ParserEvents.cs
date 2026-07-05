@@ -3,115 +3,82 @@ using XTerm.Parser;
 namespace XTerm.Events.Parser;
 
 /// <summary>
-/// Event arguments for print operations.
+///     Event arguments for print operations.
 /// </summary>
-public class PrintEventArgs : EventArgs
+public class PrintEventArgs(string data) : EventArgs
 {
     /// <summary>
-    /// The character(s) to print.
+    ///     The character(s) to print.
     /// </summary>
-    public string Data { get; }
-
-    public PrintEventArgs(string data)
-    {
-        Data = data;
-    }
+    public string Data { get; } = data;
 }
 
 /// <summary>
-/// Event arguments for control character execution.
+///     Event arguments for control character execution.
 /// </summary>
-public class ExecuteEventArgs : EventArgs
+public class ExecuteEventArgs(int code) : EventArgs
 {
     /// <summary>
-    /// The control character code.
+    ///     The control character code.
     /// </summary>
-    public int Code { get; }
-
-    public ExecuteEventArgs(int code)
-    {
-        Code = code;
-    }
+    public int Code { get; } = code;
 }
 
 /// <summary>
-/// Event arguments for CSI (Control Sequence Introducer) sequences.
+///     Event arguments for CSI (Control Sequence Introducer) sequences.
 /// </summary>
-public class CsiEventArgs : EventArgs
+public class CsiEventArgs(string identifier, Params parameters) : EventArgs
 {
     /// <summary>
-    /// The CSI sequence identifier (final character and any collected intermediates).
+    ///     The CSI sequence identifier (final character and any collected intermediates).
     /// </summary>
-    public string Identifier { get; }
+    public string Identifier { get; } = identifier;
 
     /// <summary>
-    /// The parameters for the CSI sequence.
+    ///     The parameters for the CSI sequence.
     /// </summary>
-    public Params Parameters { get; }
-
-    public CsiEventArgs(string identifier, Params parameters)
-    {
-        Identifier = identifier;
-        Parameters = parameters;
-    }
+    public Params Parameters { get; } = parameters;
 }
 
 /// <summary>
-/// Event arguments for ESC sequences.
+///     Event arguments for ESC sequences.
 /// </summary>
-public class EscEventArgs : EventArgs
+public class EscEventArgs(string finalChar, string collected) : EventArgs
 {
     /// <summary>
-    /// The final character of the ESC sequence.
+    ///     The final character of the ESC sequence.
     /// </summary>
-    public string FinalChar { get; }
+    public string FinalChar { get; } = finalChar;
 
     /// <summary>
-    /// Any collected intermediate characters.
+    ///     Any collected intermediate characters.
     /// </summary>
-    public string Collected { get; }
-
-    public EscEventArgs(string finalChar, string collected)
-    {
-        FinalChar = finalChar;
-        Collected = collected;
-    }
+    public string Collected { get; } = collected;
 }
 
 /// <summary>
-/// Event arguments for OSC (Operating System Command) sequences.
+///     Event arguments for OSC (Operating System Command) sequences.
 /// </summary>
-public class OscEventArgs : EventArgs
+public class OscEventArgs(string data) : EventArgs
 {
     /// <summary>
-    /// The OSC command data.
+    ///     The OSC command data.
     /// </summary>
-    public string Data { get; }
-
-    public OscEventArgs(string data)
-    {
-        Data = data;
-    }
+    public string Data { get; } = data;
 }
 
 /// <summary>
-/// Event arguments for DCS (Device Control String) sequences.
+///     Event arguments for DCS (Device Control String) sequences.
 /// </summary>
-public class DcsEventArgs : EventArgs
+public class DcsEventArgs(string data, Params parameters) : EventArgs
 {
     /// <summary>
-    /// The DCS command data.
+    ///     The DCS command data.
     /// </summary>
-    public string Data { get; }
+    public string Data { get; } = data;
 
     /// <summary>
-    /// The parameters for the DCS sequence.
+    ///     The parameters for the DCS sequence.
     /// </summary>
-    public Params Parameters { get; }
-
-    public DcsEventArgs(string data, Params parameters)
-    {
-        Data = data;
-        Parameters = parameters;
-    }
+    public Params Parameters { get; } = parameters;
 }

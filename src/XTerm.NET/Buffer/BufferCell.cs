@@ -1,24 +1,22 @@
 using System.Diagnostics;
-using System.Text;
-using XTerm.Common;
 
 namespace XTerm.Buffer;
 
 /// <summary>
-/// Represents a single cell in the terminal buffer.
-/// Each cell contains a character, width, and attributes.
+///     Represents a single cell in the terminal buffer.
+///     Each cell contains a character, width, and attributes.
 /// </summary>
 [DebuggerDisplay("'{Content}'  [{Width}, {Attributes}, {CodePoint}]")]
 public struct BufferCell : IEquatable<BufferCell>
 {
-    public string Content = String.Empty;
+    public string Content = string.Empty;
     public int Width = 0;
     public AttributeData Attributes = AttributeData.Default;
     public int CodePoint = 0;
 
-    public static BufferCell Empty => new BufferCell();
+    public static BufferCell Empty => new();
 
-    public static BufferCell Space => new BufferCell
+    public static BufferCell Space => new()
     {
         Content = " ",
         Width = 1,
@@ -28,9 +26,10 @@ public struct BufferCell : IEquatable<BufferCell>
 
     public BufferCell()
     {
-        Content = String.Empty;
+        Content = string.Empty;
         Attributes = AttributeData.Default;
     }
+
     public BufferCell(string content, int width, AttributeData attributes)
     {
         Content = content;
@@ -47,9 +46,15 @@ public struct BufferCell : IEquatable<BufferCell>
         Content = char.ConvertFromUtf32(codePoint);
     }
 
-    public bool IsEmpty() => CodePoint == Empty.CodePoint;
+    public bool IsEmpty()
+    {
+        return CodePoint == Empty.CodePoint;
+    }
 
-    public bool IsSpace() => CodePoint == Space.CodePoint;
+    public bool IsSpace()
+    {
+        return CodePoint == Space.CodePoint;
+    }
 
     public bool Equals(BufferCell other)
     {

@@ -1,17 +1,17 @@
 namespace XTerm.Common;
 
 /// <summary>
-/// Character set definitions for VT100/xterm terminals.
-/// Provides translations for box drawing and special character sets.
-/// All escape sequences use \u0000 format to avoid hex parsing ambiguities.
+///     Character set definitions for VT100/xterm terminals.
+///     Provides translations for box drawing and special character sets.
+///     All escape sequences use \u0000 format to avoid hex parsing ambiguities.
 /// </summary>
 public static class Charsets
 {
     /// <summary>
-    /// VT100 Line Drawing character set (DEC Special Graphics).
-    /// Maps ASCII characters to box drawing and special symbols.
+    ///     VT100 Line Drawing character set (DEC Special Graphics).
+    ///     Maps ASCII characters to box drawing and special symbols.
     /// </summary>
-    public static readonly Dictionary<char, string> VT100LineDrawing = new()
+    public static readonly Dictionary<char, string> Vt100LineDrawing = new()
     {
         // Box Drawing Characters
         { 'j', "\u2518" }, // ? Bottom right corner
@@ -25,12 +25,12 @@ public static class Charsets
         { 'v', "\u2534" }, // ? Bottom tee
         { 'w', "\u252c" }, // ? Top tee
         { 'x', "\u2502" }, // ? Vertical line
-        
+
         // Special Characters
         { '`', "\u25c6" }, // ? Diamond
         { 'a', "\u2592" }, // ? Checkerboard (stipple)
-        { 'f', "\u00b0" }, // ° Degree symbol
-        { 'g', "\u00b1" }, // ± Plus/minus
+        { 'f', "\u00b0" }, // ï¿½ Degree symbol
+        { 'g', "\u00b1" }, // ï¿½ Plus/minus
         { 'h', "\u2424" }, // ? Newline symbol
         { 'i', "\u240b" }, // ? Vertical tab symbol
         { 'o', "\u23ba" }, // ? Scan line 1
@@ -41,27 +41,27 @@ public static class Charsets
         { 'z', "\u2265" }, // ? Greater than or equal
         { '{', "\u03c0" }, // ? Pi
         { '|', "\u2260" }, // ? Not equal
-        { '}', "\u00a3" }, // £ UK pound sign
-        { '~', "\u00b7" }, // · Centered dot/bullet
+        { '}', "\u00a3" }, // ï¿½ UK pound sign
+        { '~', "\u00b7" } // ï¿½ Centered dot/bullet
     };
 
     /// <summary>
-    /// UK character set.
-    /// Maps # to pound symbol.
+    ///     UK character set.
+    ///     Maps # to pound symbol.
     /// </summary>
-    public static readonly Dictionary<char, string> UKCharset = new()
+    public static readonly Dictionary<char, string> UkCharset = new()
     {
-        { '#', "\u00a3" } // £
+        { '#', "\u00a3" } // ï¿½
     };
 
     /// <summary>
-    /// ASCII character set (no translation).
-    /// Null dictionary means pass-through.
+    ///     ASCII character set (no translation).
+    ///     Null dictionary means pass-through.
     /// </summary>
-    public static readonly Dictionary<char, string>? ASCII = null;
+    public static readonly Dictionary<char, string>? Ascii = null;
 
     /// <summary>
-    /// Gets the charset translation table by name.
+    ///     Gets the charset translation table by name.
     /// </summary>
     /// <param name="name">Charset identifier: "0" (DEC Graphics), "A" (UK), "B" (US ASCII)</param>
     /// <returns>Character translation dictionary, or null for pass-through</returns>
@@ -69,24 +69,26 @@ public static class Charsets
     {
         return name switch
         {
-            "0" => VT100LineDrawing,  // DEC Special Graphics
-            "A" => UKCharset,          // UK
-            "B" => ASCII,              // US ASCII (default)
-            _ => ASCII                 // Default to ASCII for unknown charsets
+            "0" => Vt100LineDrawing, // DEC Special Graphics
+            "A" => UkCharset, // UK
+            "B" => Ascii, // US ASCII (default)
+            _ => Ascii // Default to ASCII for unknown charsets
         };
     }
 
     /// <summary>
-    /// Translates a character using the specified charset.
+    ///     Translates a character using the specified charset.
     /// </summary>
     /// <param name="c">Character to translate</param>
     /// <param name="charset">Charset dictionary (null means no translation)</param>
     /// <returns>Translated string (may be multi-byte Unicode)</returns>
     public static string TranslateChar(char c, Dictionary<char, string>? charset)
     {
-        if (charset == null || !charset.TryGetValue(c, out var translated))
+        if (charset == null || !charset.TryGetValue(c, out string? translated))
+        {
             return c.ToString();
-        
+        }
+
         return translated;
     }
 }
