@@ -7,6 +7,7 @@
         <LangVersion>latest</LangVersion>
         <RootNamespace>XTerm.NET</RootNamespace>
         <IsAotCompatible>true</IsAotCompatible>
+        <IsTrimmable>true</IsTrimmable>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Unicode.net" Version="2.0.0" />
