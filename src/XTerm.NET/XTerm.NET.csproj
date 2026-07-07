@@ -8,6 +8,7 @@
         <RootNamespace>XTerm.NET</RootNamespace>
         <IsAotCompatible>true</IsAotCompatible>
         <IsTrimmable>true</IsTrimmable>
+        <PackageId>SkXTerm</PackageId>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Unicode.net" Version="2.0.0" />
